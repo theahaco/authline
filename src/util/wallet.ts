@@ -1,8 +1,10 @@
 import {
 	type ISupportedWallet,
+	LobstrModule,
 	StellarWalletsKit,
 	type WalletNetwork,
 	sep43Modules,
+	xBullModule,
 } from "@creit.tech/stellar-wallets-kit"
 import { Horizon } from "@stellar/stellar-sdk"
 import { networkPassphrase, stellarNetwork } from "../contracts/util"
@@ -10,7 +12,7 @@ import storage from "./storage"
 
 const kit: StellarWalletsKit = new StellarWalletsKit({
 	network: networkPassphrase as WalletNetwork,
-	modules: sep43Modules(),
+	modules: [...sep43Modules(), new xBullModule(), new LobstrModule()],
 })
 
 export const connectWallet = async () => {

@@ -1,84 +1,41 @@
-import { Button, Icon, Layout } from "@stellar/design-system"
-import { Routes, Route, Outlet, NavLink } from "react-router-dom"
+import { Layout } from "@stellar/design-system"
 import styles from "./App.module.css"
+import { AuthorizeTrustline } from "./components/AuthorizeTrustline"
 import ConnectAccount from "./components/ConnectAccount"
-import { labPrefix } from "./contracts/util"
-import Debug from "./pages/Debug"
-import Home from "./pages/Home"
 
 function App() {
 	return (
-		<Routes>
-			<Route element={<AppLayout />}>
-				<Route path="/" element={<Home />} />
-				<Route path="/debug" element={<Debug />} />
-				<Route path="/debug/:contractName" element={<Debug />} />
-			</Route>
-		</Routes>
+		<div className={styles.AppLayout}>
+			<Layout.Header
+				projectId="EURCV Auth"
+				projectTitle="EURCV Auth"
+				projectLink="https://theaha.co"
+				hasThemeSwitch={true}
+				contentRight={<ConnectAccount />}
+			/>
+
+			<main>
+				<Layout.Content>
+					<Layout.Inset>
+						<AuthorizeTrustline />
+					</Layout.Inset>
+				</Layout.Content>
+			</main>
+
+			<Layout.Footer>
+				<a
+					href="https://theaha.co"
+					target="_blank"
+					rel="noopener noreferrer"
+					className={styles.BuiltBy}
+				>
+					<span>Built by</span>
+					<img src="./logo.svg" alt="The Aha Company" height={80} />
+					<span>The Aha Company</span>
+				</a>
+			</Layout.Footer>
+		</div>
 	)
 }
-
-const AppLayout: React.FC = () => (
-	<div className={styles.AppLayout}>
-		<Layout.Header
-			projectId="Scaffold"
-			projectTitle="Scaffold"
-			hasThemeSwitch={true}
-			contentCenter={
-				<>
-					<NavLink to="/debug">
-						{({ isActive }) => (
-							<Button variant="tertiary" size="md" disabled={isActive}>
-								<Icon.Code02 size="md" />
-								Contract Explorer
-							</Button>
-						)}
-					</NavLink>
-					<NavLink to={labPrefix()}>
-						<Button variant="tertiary" size="md">
-							<Icon.SearchMd size="md" />
-							Transaction Explorer
-						</Button>
-					</NavLink>
-				</>
-			}
-			contentRight={<ConnectAccount />}
-		/>
-
-		<main>
-			<Layout.Content>
-				<Layout.Inset>
-					<Outlet />
-				</Layout.Inset>
-			</Layout.Content>
-		</main>
-
-		<Layout.Footer>
-			<nav>
-				<a
-					href="https://github.com/theahaco/scaffold-stellar"
-					className="Link Link--secondary"
-					target="_blank"
-				>
-					<Icon.GitPullRequest size="sm" /> GitHub
-				</a>
-				<a
-					href="https://www.youtube.com/watch?v=0syGaIn3ULk&list=PLmr3tp_7-7Gjj6gn5-bBn-QTMyaWzwOU5"
-					className="Link Link--secondary"
-					target="_blank"
-				>
-					<Icon.Youtube size="sm" /> Tutorial
-				</a>
-				<a
-					href="https://scaffoldstellar.org"
-					className="Link Link--secondary"
-					target="_blank"
-				>
-					<Icon.BookOpen01 size="sm" /> View docs
-				</a>
-			</nav>
-		</Layout.Footer>
-	</div>
-)
 
 export default App

@@ -95,10 +95,4 @@ name = "official-team-account"
 default = true
 
 [production.contracts]
-# soroban-atomic-swap-contract = { id = "C987..." }
-# soroban-auth-contract = { id = "C876..." }
-# soroban-errors-contract = { id = "C765..." }
-# soroban-hello-world-contract = { id = "C654..." }
-# soroban-increment-contract = { id = "C543..." }
-# soroban-token-contract = { id = "C432..." }
-# eurc = { id = "C321..." }
+eurcv_auth = { id = "CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3" }

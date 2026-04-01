@@ -50,6 +50,28 @@ a[target]:has(button)::after {
 	flex-direction: row-reverse;
 }
 
+.BuiltBy {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.875rem;
+	opacity: 0.7;
+	text-decoration: none;
+	color: inherit;
+}
+
+.BuiltBy:hover {
+	opacity: 1;
+}
+
+.BuiltBy img {
+	transition: filter var(--sds-anim-transition-default);
+}
+
+:global(.sds-theme-dark) .BuiltBy img {
+	filter: invert(1);
+}
+
 /** SDS FIXES */
 :global(.sds-theme-light) ol li::before,
 :global(.sds-theme-dark) ol li::before {

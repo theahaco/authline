@@ -37,9 +37,11 @@ lerna-debug.log*
 
 # generated contract clients
 packages/*
-# if you have other workspace packages, add them here
+!packages/eurcv_auth
 !packages/.gitkeep
 
 # generated contract client imports
 src/contracts/*
 !src/contracts/util.ts
+!src/contracts/eurcv_auth.ts
+tsconfig.app.tsbuildinfo

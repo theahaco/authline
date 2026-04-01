@@ -5,7 +5,6 @@ import {
 	useMemo,
 	useRef,
 	useState,
-	useTransition,
 } from "react"
 import storage from "../util/storage"
 import { wallet, fetchBalances, type MappedBalances } from "../util/wallet"
@@ -44,7 +43,7 @@ export interface WalletContextType {
 	updateBalances: () => Promise<void>
 }
 
-const POLL_INTERVAL = 1000
+const POLL_INTERVAL = 5000
 
 export const WalletContext = createContext<WalletContextType>({
 	isPending: true,
@@ -58,7 +57,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 	const [address, setAddress] = useState<string>()
 	const [network, setNetwork] = useState<string>()
 	const [networkPassphrase, setNetworkPassphrase] = useState<string>()
-	const [isPending, startTransition] = useTransition()
+	const [isPending, setIsPending] = useState(true)
 	const popupLock = useRef(false)
 
 	const nullify = () => {
@@ -165,14 +164,15 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 		}
 
 		// Get the wallet address when the component is mounted for the first time
-		startTransition(async () => {
+		const init = async () => {
 			await updateCurrentWalletState()
-			// Start polling after initial state is loaded
+			setIsPending(false)
 
 			if (isMounted) {
 				timer = setTimeout(() => void pollWalletState(), POLL_INTERVAL)
 			}
-		})
+		}
+		void init()
 
 		// Clear the timeout and stop polling when the component unmounts
 		return () => {
