@@ -1,0 +1,54 @@
+name: Deploy dApp to GitHub Pages
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+on:
+  push:
+    branches: [dapp_production]
+
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build dApp
+    runs-on: ubuntu-latest
+    environment:
+      name: dapp-pages
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build app
+        env:
+          PUBLIC_STELLAR_NETWORK_PASSPHRASE:
+            ${{ vars.PUBLIC_STELLAR_NETWORK_PASSPHRASE }}
+          PUBLIC_STELLAR_RPC_URL: ${{ vars.PUBLIC_STELLAR_RPC_URL }}
+          PUBLIC_STELLAR_HORIZON_URL:
+            ${{ vars.PUBLIC_STELLAR_HORIZON_URL }}
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
