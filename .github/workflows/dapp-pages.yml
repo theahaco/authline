@@ -6,10 +6,10 @@ permissions:
 
 on:
   push:
-    branches: [dapp_production]
+    branches: [main]
 
   pull_request:
-    branches: [dapp_production]
+    branches: [main]
 
   workflow_dispatch:
 
