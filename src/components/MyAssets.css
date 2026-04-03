@@ -1,0 +1,128 @@
+.MyAssets {
+	margin-bottom: 2rem;
+}
+
+.MyAssets h2 {
+	margin-bottom: 0.75rem;
+}
+
+.MyAssets .Card {
+	padding: 0;
+	overflow: hidden;
+}
+
+.MyAssets__empty {
+	padding: 2rem;
+	text-align: center;
+	opacity: 0.6;
+}
+
+.MyAssets__list {
+	display: flex;
+	flex-direction: column;
+}
+
+.MyAssets__row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.875rem 1.25rem;
+	border-bottom: 1px solid var(--sds-clr-gray-04);
+}
+
+.MyAssets__row:last-child {
+	border-bottom: none;
+}
+
+.MyAssets__row-info {
+	display: flex;
+	align-items: center;
+	gap: 2rem;
+	min-width: 0;
+	flex: 1;
+}
+
+.MyAssets__row-code {
+	display: flex;
+	flex-direction: column;
+	min-width: 80px;
+}
+
+.MyAssets__row-issuer {
+	opacity: 0.5;
+	font-family: "Inconsolata", monospace;
+}
+
+.MyAssets__row-balance {
+	font-variant-numeric: tabular-nums;
+}
+
+.MyAssets__row-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-shrink: 0;
+}
+
+.MyAssets__badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	font-size: 0.75rem;
+	font-weight: 500;
+	padding: 0.2rem 0.5rem;
+	border-radius: 999px;
+}
+
+.MyAssets__badge svg {
+	width: 14px;
+	height: 14px;
+}
+
+.MyAssets__badge--authorized {
+	background: var(--sds-clr-green-02);
+	color: var(--sds-clr-green-11);
+}
+
+.MyAssets__badge--unauthorized {
+	background: var(--sds-clr-red-02);
+	color: var(--sds-clr-red-11);
+}
+
+.MyAssets__result {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.75rem 1.25rem;
+	border-top: 1px solid var(--sds-clr-gray-04);
+}
+
+.MyAssets__result svg {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+}
+
+.MyAssets__result--success {
+	background: var(--sds-clr-green-02);
+	color: var(--sds-clr-green-11);
+}
+
+.MyAssets__result--error {
+	background: var(--sds-clr-red-02);
+	color: var(--sds-clr-red-11);
+}
+
+@media (max-width: 600px) {
+	.MyAssets__row {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	.MyAssets__row-actions {
+		width: 100%;
+		justify-content: flex-end;
+	}
+}

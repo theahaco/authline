@@ -1,0 +1,85 @@
+.Dashboard {
+	max-width: 640px;
+	margin: 3rem auto;
+	text-align: center;
+}
+
+.Dashboard__hero {
+	margin-bottom: 2rem;
+}
+
+.Dashboard__hero h1 {
+	font-weight: 600;
+	margin-bottom: 0.5rem;
+}
+
+.Dashboard__hero p {
+	opacity: 0.7;
+}
+
+.Dashboard__about-link {
+	display: inline-block;
+	margin-top: 0.5rem;
+	font-size: 0.875rem;
+	color: var(--sds-clr-lilac-11);
+	background: none;
+	border: none;
+	cursor: pointer;
+	text-decoration: underline;
+	padding: 0;
+}
+
+.Dashboard__about-link:hover {
+	color: var(--sds-clr-lilac-12);
+}
+
+.Dashboard__card .Card {
+	padding: 2rem;
+}
+
+.Dashboard__connect {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1.5rem;
+	padding: 2rem 0;
+	text-align: center;
+}
+
+.Dashboard__warning {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 1.5rem;
+	padding: 0.75rem 1rem;
+	border-radius: 0.5rem;
+	background: var(--sds-clr-red-02);
+	color: var(--sds-clr-red-11);
+	text-align: left;
+}
+
+.Dashboard__warning svg {
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+}
+
+/* Child components are left-aligned */
+.Dashboard :global(.MyAssets),
+.Dashboard :global(.AddTrustline) {
+	text-align: left;
+}
+
+@media (max-width: 600px) {
+	.Dashboard {
+		margin: 1.5rem auto;
+	}
+
+	.Dashboard__hero {
+		margin-bottom: 1rem;
+	}
+
+	.Dashboard__card .Card {
+		padding: 1.25rem;
+	}
+}
