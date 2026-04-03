@@ -1,15 +1,18 @@
 import { Layout } from "@stellar/design-system"
+import { useState } from "react"
 import styles from "./App.module.css"
-import { AuthorizeTrustline } from "./components/AuthorizeTrustline"
+import { AboutPage } from "./components/AboutPage"
 import ConnectAccount from "./components/ConnectAccount"
+import { Dashboard } from "./components/Dashboard"
 
 function App() {
+	const [page, setPage] = useState<"main" | "about">("main")
+
 	return (
 		<div className={styles.AppLayout}>
 			<Layout.Header
-				projectId="EURCV Auth"
-				projectTitle="EURCV Auth"
-				projectLink="https://theaha.co"
+				projectId="Stellar Assets"
+				projectTitle="Stellar Assets"
 				hasThemeSwitch={true}
 				contentRight={<ConnectAccount />}
 			/>
@@ -17,7 +20,11 @@ function App() {
 			<main>
 				<Layout.Content>
 					<Layout.Inset>
-						<AuthorizeTrustline />
+						{page === "about" ? (
+							<AboutPage onBack={() => setPage("main")} />
+						) : (
+							<Dashboard onShowAbout={() => setPage("about")} />
+						)}
 					</Layout.Inset>
 				</Layout.Content>
 			</main>
@@ -30,7 +37,11 @@ function App() {
 					className={styles.BuiltBy}
 				>
 					<span>Built by</span>
-					<img src="./logo.svg" alt="The Aha Company" height={80} />
+					<img
+						src="./logo.svg"
+						alt="The Aha Company"
+						className={styles.BuiltByLogo}
+					/>
 					<span>The Aha Company</span>
 				</a>
 			</Layout.Footer>
