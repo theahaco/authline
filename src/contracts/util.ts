@@ -5,6 +5,7 @@ const envSchema = z.object({
 	PUBLIC_STELLAR_NETWORK_PASSPHRASE: z.nativeEnum(WalletNetwork),
 	PUBLIC_STELLAR_RPC_URL: z.string(),
 	PUBLIC_STELLAR_HORIZON_URL: z.string(),
+	PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(import.meta.env)
@@ -38,3 +39,5 @@ export const networkPassphrase = env.PUBLIC_STELLAR_NETWORK_PASSPHRASE
 // NOTE: needs to be exported for contract files in this directory
 export const rpcUrl = env.PUBLIC_STELLAR_RPC_URL
 export const horizonUrl = env.PUBLIC_STELLAR_HORIZON_URL
+export const trustlineOnboardContractId =
+	env.PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID

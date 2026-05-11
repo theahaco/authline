@@ -84,6 +84,7 @@ default = true
 # soroban-token-contract = { id = "C678..." }
 # eurc = { id = "C789..." }
 guess_the_number = { client = true, constructor_args = "--admin me", after_deploy = "reset" }
+trustline_onboard = { client = true }
 
 ### Production environment configuration
 [production.network]
@@ -96,3 +97,4 @@ default = true
 
 [production.contracts]
 eurcv_auth = { id = "CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3" }
+# trustline_onboard = { id = "C..." }  # pin after first mainnet deploy

@@ -1,17 +1,29 @@
 import { Button, Card, Icon, Input, Text } from "@stellar/design-system"
 import {
+	Address,
 	Asset,
+	BASE_FEE,
+	Contract,
 	Horizon,
+	nativeToScVal,
 	Operation,
+	rpc,
 	TransactionBuilder,
 } from "@stellar/stellar-sdk"
 import { useCallback, useEffect, useState } from "react"
 import eurcvAuth from "../contracts/eurcv_auth"
-import { horizonUrl, networkPassphrase } from "../contracts/util"
+import {
+	horizonUrl,
+	networkPassphrase,
+	rpcUrl,
+	trustlineOnboardContractId,
+} from "../contracts/util"
 import { useWallet } from "../hooks/useWallet"
 import { connectWallet } from "../util/wallet"
 
 const EURCV_ISSUER = "GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G"
+const EURCV_AUTH_CONTRACT_ID =
+	"CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3"
 const eurcAsset = new Asset("EURCV", EURCV_ISSUER)
 
 type Status = "idle" | "loading" | "success" | "error"
@@ -30,8 +42,10 @@ export const AuthorizeTrustline = () => {
 	const [checking, setChecking] = useState(false)
 	const [classicStatus, setClassicStatus] = useState<Status>("idle")
 	const [sorobanStatus, setSorobanStatus] = useState<Status>("idle")
+	const [oneStepStatus, setOneStepStatus] = useState<Status>("idle")
 	const [classicError, setClassicError] = useState("")
 	const [sorobanError, setSorobanError] = useState("")
+	const [oneStepError, setOneStepError] = useState("")
 
 	const checkAccountStatus = useCallback(async (addr: string) => {
 		if (!addr.trim()) return
@@ -69,7 +83,7 @@ export const AuthorizeTrustline = () => {
 			setHasTrustline(false)
 			setIsAuthorized(false)
 		}
-	}, [account, checkAccountStatus, classicStatus, sorobanStatus])
+	}, [account, checkAccountStatus, classicStatus, sorobanStatus, oneStepStatus])
 
 	const handleClassicTrustline = async () => {
 		if (!address) return
@@ -111,6 +125,70 @@ export const AuthorizeTrustline = () => {
 				(e instanceof Error ? e.message : String(e))
 			setClassicError(String(msg))
 			setClassicStatus("error")
+		}
+	}
+
+	const handleOneStepOnboard = async () => {
+		if (!address || !trustlineOnboardContractId) return
+
+		setOneStepStatus("loading")
+		setOneStepError("")
+
+		try {
+			const sacContractId = eurcAsset.contractId(networkPassphrase)
+			const server = new rpc.Server(rpcUrl, { allowHttp: true })
+			const sourceAccount = await server.getAccount(address)
+
+			const contract = new Contract(trustlineOnboardContractId)
+			const tx = new TransactionBuilder(sourceAccount, {
+				fee: BASE_FEE,
+				networkPassphrase,
+			})
+				.addOperation(
+					contract.call(
+						"onboard",
+						nativeToScVal(Address.fromString(sacContractId), {
+							type: "address",
+						}),
+						nativeToScVal(Address.fromString(EURCV_AUTH_CONTRACT_ID), {
+							type: "address",
+						}),
+						nativeToScVal(Address.fromString(address), { type: "address" }),
+					),
+				)
+				.setTimeout(180)
+				.build()
+
+			const prepared = await server.prepareTransaction(tx)
+			const { signedTxXdr } = await signTransaction(prepared.toXDR(), {
+				networkPassphrase,
+			})
+			const sendResponse = await server.sendTransaction(
+				TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase),
+			)
+
+			if (sendResponse.status === "ERROR") {
+				throw new Error(
+					sendResponse.errorResult?.result().toString() ??
+						"sendTransaction returned ERROR",
+				)
+			}
+
+			let getResponse = await server.getTransaction(sendResponse.hash)
+			const deadline = Date.now() + 60_000
+			while (getResponse.status === "NOT_FOUND" && Date.now() < deadline) {
+				await new Promise((r) => setTimeout(r, 1000))
+				getResponse = await server.getTransaction(sendResponse.hash)
+			}
+
+			if (getResponse.status === "SUCCESS") {
+				setOneStepStatus("success")
+			} else {
+				throw new Error(`Transaction ${getResponse.status}`)
+			}
+		} catch (e) {
+			setOneStepError(e instanceof Error ? e.message : String(e))
+			setOneStepStatus("error")
 		}
 	}
 
@@ -196,6 +274,21 @@ export const AuthorizeTrustline = () => {
 							)}
 
 							<div className="AuthorizeTrustline__actions">
+								{trustlineOnboardContractId &&
+									account.trim() === address &&
+									!hasTrustline &&
+									!isAuthorized && (
+										<Button
+											variant="primary"
+											size="lg"
+											disabled={oneStepStatus === "loading" || checking}
+											onClick={() => void handleOneStepOnboard()}
+										>
+											{oneStepStatus === "loading"
+												? "Onboarding..."
+												: "Add & Authorize EURCV (1 signature)"}
+										</Button>
+									)}
 								<Button
 									variant="secondary"
 									size="lg"
@@ -211,7 +304,7 @@ export const AuthorizeTrustline = () => {
 											: "Add EURCV Trustline"}
 								</Button>
 								<Button
-									variant="primary"
+									variant={trustlineOnboardContractId ? "secondary" : "primary"}
 									size="lg"
 									disabled={
 										sorobanStatus === "loading" ||
@@ -288,6 +381,22 @@ export const AuthorizeTrustline = () => {
 							<Icon.XCircle />
 							<Text as="p" size="md">
 								{sorobanError}
+							</Text>
+						</div>
+					)}
+					{oneStepStatus === "success" && (
+						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
+							<Icon.CheckCircle />
+							<Text as="p" size="md">
+								Trustline added and authorized in one step.
+							</Text>
+						</div>
+					)}
+					{oneStepStatus === "error" && (
+						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--error">
+							<Icon.XCircle />
+							<Text as="p" size="md">
+								{oneStepError}
 							</Text>
 						</div>
 					)}
