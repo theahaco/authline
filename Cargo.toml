@@ -1,5 +1,9 @@
 [workspace]
-members = ["contracts/guess-the-number", "contracts/trustline-onboard"]
+members = [
+    "contracts/guess-the-number",
+    "contracts/trustline-onboard",
+    "contracts/eurcv-auth-stub",
+]
 resolver = "2"
 
 [workspace.package]

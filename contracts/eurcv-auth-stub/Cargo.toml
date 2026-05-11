@@ -1,0 +1,21 @@
+[package]
+name = "eurcv-auth-stub"
+description = "Testnet stub for the eurcv_auth admin contract — permissionless authorize, no ban list"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+version.workspace = true
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
