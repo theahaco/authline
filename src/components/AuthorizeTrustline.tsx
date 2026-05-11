@@ -13,6 +13,10 @@ import {
 import { useCallback, useEffect, useState } from "react"
 import eurcvAuth from "../contracts/eurcv_auth"
 import {
+	assetCode,
+	assetIssuer,
+	assetSacContractId,
+	eurcvAuthContractId,
 	horizonUrl,
 	networkPassphrase,
 	rpcUrl,
@@ -21,10 +25,7 @@ import {
 import { useWallet } from "../hooks/useWallet"
 import { connectWallet } from "../util/wallet"
 
-const EURCV_ISSUER = "GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G"
-const EURCV_AUTH_CONTRACT_ID =
-	"CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3"
-const eurcAsset = new Asset("EURCV", EURCV_ISSUER)
+const asset = new Asset(assetCode, assetIssuer)
 
 type Status = "idle" | "loading" | "success" | "error"
 
@@ -57,9 +58,9 @@ export const AuthorizeTrustline = () => {
 				(b) =>
 					b.asset_type !== "native" &&
 					b.asset_type !== "liquidity_pool_shares" &&
-					(b as Horizon.HorizonApi.BalanceLineAsset).asset_code === "EURCV" &&
+					(b as Horizon.HorizonApi.BalanceLineAsset).asset_code === assetCode &&
 					(b as Horizon.HorizonApi.BalanceLineAsset).asset_issuer ===
-						EURCV_ISSUER,
+						assetIssuer,
 			) as Horizon.HorizonApi.BalanceLineAsset | undefined
 
 			setHasTrustline(!!trustline)
@@ -99,7 +100,7 @@ export const AuthorizeTrustline = () => {
 				fee: "100",
 				networkPassphrase: networkPassphrase as string,
 			})
-				.addOperation(Operation.changeTrust({ asset: eurcAsset }))
+				.addOperation(Operation.changeTrust({ asset }))
 				.setTimeout(180)
 				.build()
 
@@ -135,7 +136,8 @@ export const AuthorizeTrustline = () => {
 		setOneStepError("")
 
 		try {
-			const sacContractId = eurcAsset.contractId(networkPassphrase)
+			const sacContractId =
+				assetSacContractId ?? asset.contractId(networkPassphrase)
 			const server = new rpc.Server(rpcUrl, { allowHttp: true })
 			const sourceAccount = await server.getAccount(address)
 
@@ -150,7 +152,7 @@ export const AuthorizeTrustline = () => {
 						nativeToScVal(Address.fromString(sacContractId), {
 							type: "address",
 						}),
-						nativeToScVal(Address.fromString(EURCV_AUTH_CONTRACT_ID), {
+						nativeToScVal(Address.fromString(eurcvAuthContractId), {
 							type: "address",
 						}),
 						nativeToScVal(Address.fromString(address), { type: "address" }),
@@ -221,9 +223,9 @@ export const AuthorizeTrustline = () => {
 	return (
 		<div className="AuthorizeTrustline">
 			<div className="AuthorizeTrustline__hero">
-				<h1>EURCV Trustline Authorization</h1>
+				<h1>{assetCode} Trustline Authorization</h1>
 				<Text as="p" size="md">
-					Authorize an account&apos;s EURCV trustline on Stellar mainnet.
+					Authorize an account&apos;s {assetCode} trustline on Stellar.
 				</Text>
 			</div>
 
@@ -249,9 +251,8 @@ export const AuthorizeTrustline = () => {
 								<div className="AuthorizeTrustline__result AuthorizeTrustline__result--error">
 									<Icon.AlertTriangle />
 									<Text as="p" size="md">
-										Your wallet is set to testnet. In Freighter, go to Settings
-										&gt; Network &gt; select <strong>Mainnet</strong>, then
-										reconnect.
+										Your wallet is on the wrong network. Switch it to match the
+										app&apos;s configured network, then reconnect.
 									</Text>
 								</div>
 							)}
@@ -286,7 +287,7 @@ export const AuthorizeTrustline = () => {
 										>
 											{oneStepStatus === "loading"
 												? "Onboarding..."
-												: "Add & Authorize EURCV (1 signature)"}
+												: "Add & Authorize {assetCode} (1 signature)"}
 										</Button>
 									)}
 								<Button
@@ -301,7 +302,7 @@ export const AuthorizeTrustline = () => {
 										? "Trustline Added"
 										: classicStatus === "loading"
 											? "Adding..."
-											: "Add EURCV Trustline"}
+											: `Add ${assetCode} Trustline`}
 								</Button>
 								<Button
 									variant={trustlineOnboardContractId ? "secondary" : "primary"}
@@ -327,7 +328,7 @@ export const AuthorizeTrustline = () => {
 									<Icon.CheckCircle />
 									<div>
 										<Text as="p" size="md">
-											This account has an authorized EURCV trustline.
+											This account has an authorized {assetCode} trustline.
 										</Text>
 										<a
 											href={`https://stellar.expert/explorer/public/account/${account.trim()}`}
@@ -356,7 +357,7 @@ export const AuthorizeTrustline = () => {
 						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
 							<Icon.CheckCircle />
 							<Text as="p" size="md">
-								EURCV trustline added successfully.
+								{assetCode} trustline added successfully.
 							</Text>
 						</div>
 					)}
