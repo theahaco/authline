@@ -287,7 +287,7 @@ export const AuthorizeTrustline = () => {
 										>
 											{oneStepStatus === "loading"
 												? "Onboarding..."
-												: "Add & Authorize {assetCode} (1 signature)"}
+												: `Add & Authorize ${assetCode} (1 signature)`}
 										</Button>
 									)}
 								<Button
