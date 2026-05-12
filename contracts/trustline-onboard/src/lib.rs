@@ -1,10 +1,23 @@
 #![no_std]
 use soroban_sdk::token::StellarAssetClient;
-use soroban_sdk::{contract, contractclient, contractimpl, Address, Env, Error};
+use soroban_sdk::{
+    contract, contractclient, contracterror, contractimpl, Address, Env,
+};
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    TrustFailed = 1,
+    AuthorizationFailed = 2,
+}
 
 #[contractclient(name = "EurcvAuthClient")]
 pub trait EurcvAuth {
-    fn authorize_trustline(env: Env, account: Address) -> Result<(), Error>;
+    fn authorize_trustline(
+        env: Env,
+        account: Address,
+    ) -> Result<(), soroban_sdk::Error>;
 }
 
 #[contract]
@@ -21,10 +34,12 @@ impl TrustlineOnboard {
         holder.require_auth();
         StellarAssetClient::new(&env, &sac)
             .try_trust(&holder)
-            .map_err(|e| e.expect("SAC.trust invocation failed"))??;
+            .map_err(|_| Error::TrustFailed)?
+            .map_err(|_| Error::TrustFailed)?;
         EurcvAuthClient::new(&env, &eurcv_auth)
             .try_authorize_trustline(&holder)
-            .map_err(|e| e.expect("authorize_trustline invocation failed"))??;
+            .map_err(|_| Error::AuthorizationFailed)?
+            .map_err(|_| Error::AuthorizationFailed)?;
         Ok(())
     }
 }

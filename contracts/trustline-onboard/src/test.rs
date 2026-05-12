@@ -20,7 +20,10 @@ impl StubEurcvAuth {
 
 #[contractimpl]
 impl EurcvAuth for StubEurcvAuth {
-    fn authorize_trustline(env: Env, account: Address) -> Result<(), Error> {
+    fn authorize_trustline(
+        env: Env,
+        account: Address,
+    ) -> Result<(), soroban_sdk::Error> {
         let sac: Address = env
             .storage()
             .instance()
