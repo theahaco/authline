@@ -97,4 +97,4 @@ default = true
 
 [production.contracts]
 eurcv_auth = { id = "CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3" }
-# trustline_onboard = { id = "C..." }  # pin after first mainnet deploy
+trustline_onboard = { id = "CDH2Z3PMBEL2T3EBM3VW5ENDPURYUY7YIKX3XMU3TK5AP4P3LXMPAGLC" }
