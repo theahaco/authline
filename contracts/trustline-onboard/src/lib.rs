@@ -19,8 +19,12 @@ impl TrustlineOnboard {
         holder: Address,
     ) -> Result<(), Error> {
         holder.require_auth();
-        StellarAssetClient::new(&env, &sac).trust(&holder);
-        EurcvAuthClient::new(&env, &eurcv_auth).authorize_trustline(&holder);
+        StellarAssetClient::new(&env, &sac)
+            .try_trust(&holder)
+            .map_err(|e| e.expect("SAC.trust invocation failed"))??;
+        EurcvAuthClient::new(&env, &eurcv_auth)
+            .try_authorize_trustline(&holder)
+            .map_err(|e| e.expect("authorize_trustline invocation failed"))??;
         Ok(())
     }
 }
