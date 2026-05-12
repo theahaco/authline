@@ -20,13 +20,14 @@ impl StubEurcvAuth {
 
 #[contractimpl]
 impl EurcvAuth for StubEurcvAuth {
-    fn authorize_trustline(env: Env, account: Address) {
+    fn authorize_trustline(env: Env, account: Address) -> Result<(), Error> {
         let sac: Address = env
             .storage()
             .instance()
             .get(&symbol_short!("SAC"))
             .expect("SAC not set");
         StellarAssetClient::new(&env, &sac).set_authorized(&account, &true);
+        Ok(())
     }
 }
 
