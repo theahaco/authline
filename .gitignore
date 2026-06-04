@@ -43,5 +43,6 @@ packages/*
 # generated contract client imports
 src/contracts/*
 !src/contracts/util.ts
+!src/contracts/assets.ts
 !src/contracts/eurcv_auth.ts
 tsconfig.app.tsbuildinfo
