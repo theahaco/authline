@@ -22,10 +22,10 @@ fn authorize_trustline_flips_authorized_flag() {
     sac_client.trust(&holder);
     assert!(!sac_client.authorized(&holder));
 
-    let stub = env.register(EurcvAuthStub, (sac_addr.clone(),));
+    let stub = env.register(AuthorizerStub, (sac_addr.clone(),));
     sac_client.set_admin(&stub);
 
-    EurcvAuthStubClient::new(&env, &stub).authorize_trustline(&holder);
+    AuthorizerStubClient::new(&env, &stub).authorize_trustline(&holder);
 
     assert!(sac_client.authorized(&holder));
 }

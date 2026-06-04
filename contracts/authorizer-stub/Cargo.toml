@@ -1,6 +1,6 @@
 [package]
-name = "eurcv-auth-stub"
-description = "Testnet stub for the eurcv_auth admin contract — permissionless authorize, no ban list"
+name = "authorizer-stub"
+description = "Testnet stub authorizer — permissionless authorize_trustline, no ban list. Test/dev only."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

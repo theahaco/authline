@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Issue a classic Stellar asset on testnet with AUTH_REQUIRED + AUTH_REVOCABLE,
-# deploy its Stellar Asset Contract (SAC), then deploy the eurcv-auth-stub
+# deploy its Stellar Asset Contract (SAC), then deploy the authorizer-stub
 # admin contract and hand SAC admin rights to it.
 #
 # Usage:
@@ -23,7 +23,7 @@ set -euo pipefail
 SOURCE="${SOURCE:-me}"
 ASSET_CODE="${ASSET_CODE:-TESTV}"
 NETWORK="${NETWORK:-testnet}"
-WASM="target/wasm32v1-none/release/eurcv_auth_stub.wasm"
+WASM="target/wasm32v1-none/release/authorizer_stub.wasm"
 
 if ! command -v stellar >/dev/null 2>&1; then
     echo "error: stellar CLI not found on PATH" >&2
@@ -52,7 +52,7 @@ stellar tx new set-options \
     --set-required \
     --set-revocable
 
-# Build all workspace contracts (in particular eurcv-auth-stub).
+# Build all workspace contracts (in particular authorizer-stub).
 echo ">> building contracts"
 cargo build --release --target wasm32v1-none
 
@@ -65,7 +65,7 @@ SAC="$(stellar contract asset deploy \
 echo ">> SAC: $SAC"
 
 # Deploy the stub admin contract, passing the SAC as a constructor arg.
-echo ">> deploying eurcv-auth-stub"
+echo ">> deploying authorizer-stub"
 STUB="$(stellar contract deploy \
     --wasm "$WASM" \
     --source "$SOURCE" \

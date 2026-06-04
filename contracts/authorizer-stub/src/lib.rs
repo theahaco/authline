@@ -14,10 +14,10 @@ pub enum Error {
 }
 
 #[contract]
-pub struct EurcvAuthStub;
+pub struct AuthorizerStub;
 
 #[contractimpl]
-impl EurcvAuthStub {
+impl AuthorizerStub {
     pub fn __constructor(env: Env, sac: Address) {
         env.storage().instance().set(&SAC_KEY, &sac);
     }

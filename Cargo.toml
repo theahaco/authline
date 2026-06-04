@@ -2,7 +2,7 @@
 members = [
     "contracts/guess-the-number",
     "contracts/trustline-onboard",
-    "contracts/eurcv-auth-stub",
+    "contracts/authorizer-stub",
 ]
 resolver = "2"
 
