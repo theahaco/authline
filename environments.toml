@@ -82,6 +82,5 @@ name = "official-team-account"
 default = true
 
 [production.contracts]
-eurcv_auth = { id = "CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3" }
 # Keep this id in sync with PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID in the frontend .env.
 trustline_onboard = { id = "CDH2Z3PMBEL2T3EBM3VW5ENDPURYUY7YIKX3XMU3TK5AP4P3LXMPAGLC" }

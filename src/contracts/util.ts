@@ -51,9 +51,3 @@ export const rpcUrl = env.PUBLIC_STELLAR_RPC_URL
 export const horizonUrl = env.PUBLIC_STELLAR_HORIZON_URL
 export const trustlineOnboardContractId =
 	env.PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID
-
-// Source of truth for asset data is now src/contracts/assets.ts. MAINNET_EURCV_AUTH / eurcvAuthContractId remain only for the legacy generated eurcv_auth.ts binding.
-const MAINNET_EURCV_AUTH =
-	"CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3"
-export const eurcvAuthContractId =
-	env.PUBLIC_EURCV_AUTH_CONTRACT_ID ?? MAINNET_EURCV_AUTH
