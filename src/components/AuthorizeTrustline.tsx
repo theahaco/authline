@@ -1,33 +1,22 @@
 import { Button, Card, Icon, Input, Text } from "@stellar/design-system"
+import { useEffect, useMemo, useState } from "react"
+import { assetsForNetwork, type OfficialAsset } from "../contracts/assets"
 import {
-	Address,
-	Asset,
-	BASE_FEE,
-	Contract,
-	Horizon,
-	nativeToScVal,
-	Operation,
-	rpc,
-	TransactionBuilder,
-} from "@stellar/stellar-sdk"
-import { useCallback, useEffect, useState } from "react"
-import eurcvAuth from "../contracts/eurcv_auth"
-import {
-	assetCode,
-	assetIssuer,
-	assetSacContractId,
-	eurcvAuthContractId,
-	horizonUrl,
 	networkPassphrase,
-	rpcUrl,
+	stellarNetwork,
 	trustlineOnboardContractId,
 } from "../contracts/util"
+import { useOnboard } from "../hooks/useOnboard"
 import { useWallet } from "../hooks/useWallet"
 import { connectWallet } from "../util/wallet"
+import { AssetSelector } from "./AssetSelector"
 
-const asset = new Asset(assetCode, assetIssuer)
-
-type Status = "idle" | "loading" | "success" | "error"
+const EXPLORER_PATH: Record<string, string | null> = {
+	PUBLIC: "public",
+	TESTNET: "testnet",
+	FUTURENET: null,
+	LOCAL: null,
+}
 
 export const AuthorizeTrustline = () => {
 	const {
@@ -37,195 +26,42 @@ export const AuthorizeTrustline = () => {
 	} = useWallet()
 	const isWrongNetwork =
 		address && walletPassphrase && walletPassphrase !== networkPassphrase
+
+	const assets = useMemo(() => assetsForNetwork(), [])
+	const [selected, setSelected] = useState<OfficialAsset | null>(
+		assets[0] ?? null,
+	)
 	const [account, setAccount] = useState("")
-	const [hasTrustline, setHasTrustline] = useState(false)
-	const [isAuthorized, setIsAuthorized] = useState(false)
-	const [checking, setChecking] = useState(false)
-	const [classicStatus, setClassicStatus] = useState<Status>("idle")
-	const [sorobanStatus, setSorobanStatus] = useState<Status>("idle")
-	const [oneStepStatus, setOneStepStatus] = useState<Status>("idle")
-	const [classicError, setClassicError] = useState("")
-	const [sorobanError, setSorobanError] = useState("")
-	const [oneStepError, setOneStepError] = useState("")
 
-	const checkAccountStatus = useCallback(async (addr: string) => {
-		if (!addr.trim()) return
-		setChecking(true)
-		try {
-			const horizon = new Horizon.Server(horizonUrl)
-			const acc = await horizon.loadAccount(addr)
-			const trustline = acc.balances.find(
-				(b) =>
-					b.asset_type !== "native" &&
-					b.asset_type !== "liquidity_pool_shares" &&
-					(b as Horizon.HorizonApi.BalanceLineAsset).asset_code === assetCode &&
-					(b as Horizon.HorizonApi.BalanceLineAsset).asset_issuer ===
-						assetIssuer,
-			) as Horizon.HorizonApi.BalanceLineAsset | undefined
-
-			setHasTrustline(!!trustline)
-			setIsAuthorized(!!trustline?.is_authorized)
-		} catch {
-			setHasTrustline(false)
-			setIsAuthorized(false)
-		} finally {
-			setChecking(false)
-		}
-	}, [])
+	const ob = useOnboard(selected, address ?? null, signTransaction)
 
 	useEffect(() => {
 		if (address && !account) setAccount(address)
 	}, [address, account])
 
 	useEffect(() => {
-		if (account.trim().length >= 56) {
-			void checkAccountStatus(account.trim())
-		} else {
-			setHasTrustline(false)
-			setIsAuthorized(false)
-		}
-	}, [account, checkAccountStatus, classicStatus, sorobanStatus, oneStepStatus])
+		if (account.trim().length >= 56) void ob.refresh(account.trim())
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [account, selected])
 
-	const handleClassicTrustline = async () => {
-		if (!address) return
-
-		setClassicStatus("loading")
-		setClassicError("")
-
-		try {
-			const horizon = new Horizon.Server(horizonUrl)
-			const sourceAccount = await horizon.loadAccount(address)
-
-			const tx = new TransactionBuilder(sourceAccount, {
-				fee: "100",
-				networkPassphrase: networkPassphrase as string,
-			})
-				.addOperation(Operation.changeTrust({ asset }))
-				.setTimeout(180)
-				.build()
-
-			const { signedTxXdr } = await signTransaction(tx.toXDR(), {
-				networkPassphrase,
-			})
-			const result = await horizon.submitTransaction(
-				TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase as string),
-			)
-			if ((result as any).successful) {
-				setClassicStatus("success")
-			} else {
-				setClassicError("Transaction failed")
-				setClassicStatus("error")
-			}
-		} catch (e: any) {
-			const extras = e?.response?.data?.extras
-			const resultCodes = extras?.result_codes
-			const msg =
-				resultCodes?.operations?.[0] ||
-				resultCodes?.transaction ||
-				extras?.result_xdr ||
-				(e instanceof Error ? e.message : String(e))
-			setClassicError(String(msg))
-			setClassicStatus("error")
-		}
-	}
-
-	const handleOneStepOnboard = async () => {
-		if (!address || !trustlineOnboardContractId) return
-
-		setOneStepStatus("loading")
-		setOneStepError("")
-
-		try {
-			const sacContractId =
-				assetSacContractId ?? asset.contractId(networkPassphrase)
-			const server = new rpc.Server(rpcUrl, { allowHttp: true })
-			const sourceAccount = await server.getAccount(address)
-
-			const contract = new Contract(trustlineOnboardContractId)
-			const tx = new TransactionBuilder(sourceAccount, {
-				fee: BASE_FEE,
-				networkPassphrase,
-			})
-				.addOperation(
-					contract.call(
-						"onboard",
-						nativeToScVal(Address.fromString(sacContractId), {
-							type: "address",
-						}),
-						nativeToScVal(Address.fromString(eurcvAuthContractId), {
-							type: "address",
-						}),
-						nativeToScVal(Address.fromString(address), { type: "address" }),
-					),
-				)
-				.setTimeout(180)
-				.build()
-
-			const prepared = await server.prepareTransaction(tx)
-			const { signedTxXdr } = await signTransaction(prepared.toXDR(), {
-				networkPassphrase,
-			})
-			const sendResponse = await server.sendTransaction(
-				TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase),
-			)
-
-			if (sendResponse.status === "ERROR") {
-				throw new Error(
-					sendResponse.errorResult?.result().toString() ??
-						"sendTransaction returned ERROR",
-				)
-			}
-
-			let getResponse = await server.getTransaction(sendResponse.hash)
-			const deadline = Date.now() + 60_000
-			while (getResponse.status === "NOT_FOUND" && Date.now() < deadline) {
-				await new Promise((r) => setTimeout(r, 1000))
-				getResponse = await server.getTransaction(sendResponse.hash)
-			}
-
-			if (getResponse.status === "SUCCESS") {
-				setOneStepStatus("success")
-			} else {
-				throw new Error(`Transaction ${getResponse.status}`)
-			}
-		} catch (e) {
-			setOneStepError(e instanceof Error ? e.message : String(e))
-			setOneStepStatus("error")
-		}
-	}
-
-	const handleSorobanAuthorize = async () => {
-		const trimmed = account.trim()
-		if (!trimmed || !address) return
-
-		setSorobanStatus("loading")
-		setSorobanError("")
-
-		try {
-			const tx = await eurcvAuth.authorize_trustline(
-				{ account: trimmed },
-				{ publicKey: address },
-			)
-			const { result } = await (tx as any).signAndSend({ signTransaction })
-
-			if (result.isOk()) {
-				setSorobanStatus("success")
-			} else {
-				setSorobanError(String(result.unwrapErr()))
-				setSorobanStatus("error")
-			}
-		} catch (e) {
-			setSorobanError(e instanceof Error ? e.message : String(e))
-			setSorobanStatus("error")
-		}
-	}
+	const isSelf = account.trim() === address
+	const explorer = EXPLORER_PATH[stellarNetwork]
+	const canOneStep =
+		!!selected &&
+		selected.capability === "permissionedOneStep" &&
+		!!trustlineOnboardContractId &&
+		isSelf &&
+		!ob.hasTrustline &&
+		!ob.isAuthorized
+	const isPermissioned = selected?.capability !== "open"
 
 	return (
 		<div className="AuthorizeTrustline">
 			<div className="AuthorizeTrustline__hero">
-				<h1>{assetCode} Trustline Authorization</h1>
+				<h1>Stellar Asset Onboarding</h1>
 				<Text as="p" size="md">
-					Authorize an account&apos;s {assetCode} trustline on Stellar.
+					Add a trustline to an official Stellar asset — and authorize it in one
+					step where required.
 				</Text>
 			</div>
 
@@ -252,157 +88,174 @@ export const AuthorizeTrustline = () => {
 									<Icon.AlertTriangle />
 									<Text as="p" size="md">
 										Your wallet is on the wrong network. Switch it to match the
-										app&apos;s configured network, then reconnect.
+										app, then reconnect.
 									</Text>
 								</div>
 							)}
-							<Input
-								id="account"
-								fieldSize="lg"
-								label="Account address"
-								placeholder="G..."
-								value={account}
-								onChange={(e) => setAccount(e.target.value)}
-							/>
-							{account !== address && (
-								<Button
-									variant="tertiary"
-									size="sm"
-									onClick={() => setAccount(address)}
-								>
-									Use my address
-								</Button>
-							)}
 
-							<div className="AuthorizeTrustline__actions">
-								{trustlineOnboardContractId &&
-									account.trim() === address &&
-									!hasTrustline &&
-									!isAuthorized && (
+							<AssetSelector
+								assets={assets}
+								selected={selected}
+								onSelect={setSelected}
+							/>
+
+							{selected && (
+								<>
+									<Input
+										id="account"
+										fieldSize="lg"
+										label="Account address"
+										placeholder="G..."
+										value={account}
+										onChange={(e) => setAccount(e.target.value)}
+									/>
+									{account !== address && (
 										<Button
-											variant="primary"
-											size="lg"
-											disabled={oneStepStatus === "loading" || checking}
-											onClick={() => void handleOneStepOnboard()}
+											variant="tertiary"
+											size="sm"
+											onClick={() => setAccount(address)}
 										>
-											{oneStepStatus === "loading"
-												? "Onboarding..."
-												: `Add & Authorize ${assetCode} (1 signature)`}
+											Use my address
 										</Button>
 									)}
-								<Button
-									variant="secondary"
-									size="lg"
-									disabled={
-										classicStatus === "loading" || hasTrustline || checking
-									}
-									onClick={() => void handleClassicTrustline()}
-								>
-									{hasTrustline
-										? "Trustline Added"
-										: classicStatus === "loading"
-											? "Adding..."
-											: `Add ${assetCode} Trustline`}
-								</Button>
-								<Button
-									variant={trustlineOnboardContractId ? "secondary" : "primary"}
-									size="lg"
-									disabled={
-										sorobanStatus === "loading" ||
-										!account.trim() ||
-										isAuthorized ||
-										checking
-									}
-									onClick={() => void handleSorobanAuthorize()}
-								>
-									{isAuthorized
-										? "Already Authorized"
-										: sorobanStatus === "loading"
-											? "Authorizing..."
-											: "Authorize Trustline"}
-								</Button>
-							</div>
 
-							{!checking && hasTrustline && isAuthorized ? (
-								<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
-									<Icon.CheckCircle />
-									<div>
-										<Text as="p" size="md">
-											This account has an authorized {assetCode} trustline.
-										</Text>
-										<a
-											href={`https://stellar.expert/explorer/public/account/${account.trim()}`}
-											target="_blank"
-											rel="noopener noreferrer"
-											style={{ fontSize: "0.875rem" }}
+									<div className="AuthorizeTrustline__actions">
+										{canOneStep && (
+											<Button
+												variant="primary"
+												size="lg"
+												disabled={
+													ob.oneStep.status === "loading" || ob.checking
+												}
+												onClick={() => void ob.runOneStep()}
+											>
+												{ob.oneStep.status === "loading"
+													? "Onboarding..."
+													: `Add & Authorize ${selected.code} (1 signature)`}
+											</Button>
+										)}
+										<Button
+											variant={canOneStep ? "secondary" : "primary"}
+											size="lg"
+											disabled={
+												ob.classic.status === "loading" ||
+												ob.hasTrustline ||
+												ob.checking
+											}
+											onClick={() => void ob.runClassic()}
 										>
-											View on Stellar Expert
-										</a>
+											{ob.hasTrustline
+												? "Trustline Added"
+												: ob.classic.status === "loading"
+													? "Adding..."
+													: `Add ${selected.code} Trustline`}
+										</Button>
+										{isPermissioned && selected.authorizer && (
+											<Button
+												variant="secondary"
+												size="lg"
+												disabled={
+													ob.authorize.status === "loading" ||
+													!account.trim() ||
+													ob.isAuthorized ||
+													ob.checking
+												}
+												onClick={() => void ob.runAuthorize(account.trim())}
+											>
+												{ob.isAuthorized
+													? "Already Authorized"
+													: ob.authorize.status === "loading"
+														? "Authorizing..."
+														: "Authorize Trustline"}
+											</Button>
+										)}
 									</div>
-								</div>
-							) : (
-								<Text
-									as="p"
-									size="sm"
-									style={{ marginTop: "0.75rem", opacity: 0.6 }}
-								>
-									Step 1: Add the classic EURCV trustline. Step 2: Authorize it
-									on the admin contract.
-								</Text>
+
+									{!ob.checking &&
+									ob.hasTrustline &&
+									(isPermissioned ? ob.isAuthorized : true) ? (
+										<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
+											<Icon.CheckCircle />
+											<div>
+												<Text as="p" size="md">
+													{isPermissioned
+														? `This account has an authorized ${selected.code} trustline.`
+														: `This account holds a ${selected.code} trustline.`}
+												</Text>
+												{explorer && (
+													<a
+														href={`https://stellar.expert/explorer/${explorer}/account/${account.trim()}`}
+														target="_blank"
+														rel="noopener noreferrer"
+														style={{ fontSize: "0.875rem" }}
+													>
+														View on Stellar Expert
+													</a>
+												)}
+											</div>
+										</div>
+									) : (
+										<Text
+											as="p"
+											size="sm"
+											style={{ marginTop: "0.75rem", opacity: 0.6 }}
+										>
+											{selected.capability === "open"
+												? `Add the ${selected.code} trustline — it's usable immediately.`
+												: selected.capability === "permissionedManual"
+													? `Add the trustline, then the issuer must approve it before you can hold ${selected.code}.`
+													: `One step adds & authorizes ${selected.code}; or add the trustline then authorize it.`}
+										</Text>
+									)}
+								</>
 							)}
 						</>
 					)}
 
-					{classicStatus === "success" && (
-						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
-							<Icon.CheckCircle />
-							<Text as="p" size="md">
-								{assetCode} trustline added successfully.
-							</Text>
-						</div>
-					)}
-					{classicStatus === "error" && (
-						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--error">
-							<Icon.XCircle />
-							<Text as="p" size="md">
-								{classicError}
-							</Text>
-						</div>
-					)}
-					{sorobanStatus === "success" && (
-						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
-							<Icon.CheckCircle />
-							<Text as="p" size="md">
-								Trustline authorized successfully.
-							</Text>
-						</div>
-					)}
-					{sorobanStatus === "error" && (
-						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--error">
-							<Icon.XCircle />
-							<Text as="p" size="md">
-								{sorobanError}
-							</Text>
-						</div>
-					)}
-					{oneStepStatus === "success" && (
-						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
-							<Icon.CheckCircle />
-							<Text as="p" size="md">
-								Trustline added and authorized in one step.
-							</Text>
-						</div>
-					)}
-					{oneStepStatus === "error" && (
-						<div className="AuthorizeTrustline__result AuthorizeTrustline__result--error">
-							<Icon.XCircle />
-							<Text as="p" size="md">
-								{oneStepError}
-							</Text>
-						</div>
-					)}
+					<FlowResult
+						label={`${selected?.code ?? "Asset"} trustline added successfully.`}
+						state={ob.classic}
+					/>
+					<FlowResult
+						label="Trustline authorized successfully."
+						state={ob.authorize}
+					/>
+					<FlowResult
+						label="Trustline added and authorized in one step."
+						state={ob.oneStep}
+					/>
 				</Card>
 			</div>
 		</div>
 	)
+}
+
+const FlowResult = ({
+	label,
+	state,
+}: {
+	label: string
+	state: { status: string; error: string }
+}) => {
+	if (state.status === "success") {
+		return (
+			<div className="AuthorizeTrustline__result AuthorizeTrustline__result--success">
+				<Icon.CheckCircle />
+				<Text as="p" size="md">
+					{label}
+				</Text>
+			</div>
+		)
+	}
+	if (state.status === "error") {
+		return (
+			<div className="AuthorizeTrustline__result AuthorizeTrustline__result--error">
+				<Icon.XCircle />
+				<Text as="p" size="md">
+					{state.error}
+				</Text>
+			</div>
+		)
+	}
+	return null
 }
