@@ -46,13 +46,8 @@ export const horizonUrl = env.PUBLIC_STELLAR_HORIZON_URL
 export const trustlineOnboardContractId =
 	env.PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID
 
-// Mainnet EURCV defaults; override via PUBLIC_TEST_* / PUBLIC_EURCV_AUTH_CONTRACT_ID for testnet.
-const MAINNET_EURCV_ISSUER =
-	"GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G"
+// Source of truth for asset data is now src/contracts/assets.ts. MAINNET_EURCV_AUTH / eurcvAuthContractId remain only for the legacy generated eurcv_auth.ts binding.
 const MAINNET_EURCV_AUTH =
 	"CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3"
-export const assetCode = env.PUBLIC_TEST_ASSET_CODE ?? "EURCV"
-export const assetIssuer = env.PUBLIC_TEST_ASSET_ISSUER ?? MAINNET_EURCV_ISSUER
-export const assetSacContractId = env.PUBLIC_TEST_SAC
 export const eurcvAuthContractId =
 	env.PUBLIC_EURCV_AUTH_CONTRACT_ID ?? MAINNET_EURCV_AUTH
