@@ -125,7 +125,9 @@ export const AuthorizeTrustline = () => {
 												variant="primary"
 												size="lg"
 												disabled={
-													ob.oneStep.status === "loading" || ob.checking
+													ob.oneStep.status === "loading" ||
+													ob.checking ||
+													!!isWrongNetwork
 												}
 												onClick={() => void ob.runOneStep()}
 											>
@@ -140,7 +142,8 @@ export const AuthorizeTrustline = () => {
 											disabled={
 												ob.classic.status === "loading" ||
 												ob.hasTrustline ||
-												ob.checking
+												ob.checking ||
+												!!isWrongNetwork
 											}
 											onClick={() => void ob.runClassic()}
 										>
@@ -158,7 +161,8 @@ export const AuthorizeTrustline = () => {
 													ob.authorize.status === "loading" ||
 													!account.trim() ||
 													ob.isAuthorized ||
-													ob.checking
+													ob.checking ||
+													!!isWrongNetwork
 												}
 												onClick={() => void ob.runAuthorize(account.trim())}
 											>

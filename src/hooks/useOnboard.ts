@@ -29,7 +29,7 @@ const PASSPHRASE = networkPassphrase as string
 
 async function pollForSuccess(server: rpc.Server, hash: string): Promise<void> {
 	let res = await server.getTransaction(hash)
-	const deadline = Date.now() + 60_000
+	const deadline = Date.now() + 180_000
 	while (res.status === "NOT_FOUND" && Date.now() < deadline) {
 		await new Promise((r) => setTimeout(r, 1000))
 		res = await server.getTransaction(hash)
@@ -75,9 +75,15 @@ export function useOnboard(
 				) as Horizon.HorizonApi.BalanceLineAsset | undefined
 				setHasTrustline(!!tl)
 				setIsAuthorized(!!tl?.is_authorized)
-			} catch {
-				setHasTrustline(false)
-				setIsAuthorized(false)
+			} catch (e) {
+				// 404 = account not funded / no such account → definitively no trustline.
+				// Other (transient/network) errors: keep prior state rather than implying "no trustline".
+				const status = (e as { response?: { status?: number } })?.response
+					?.status
+				if (status === 404) {
+					setHasTrustline(false)
+					setIsAuthorized(false)
+				}
 			} finally {
 				setChecking(false)
 			}
