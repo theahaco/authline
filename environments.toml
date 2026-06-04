@@ -58,13 +58,6 @@ after_deploy = """
 reset
 """
 
-# Coming Soon: Specify live contracts to bind & import in this project using the given name.
-# During initialization, these contracts will also be "spooned" into the development network,
-# meaning that their data will match the live network at the given sequence number.
-# [development.contracts.eurc]
-# environment = "production"
-# address = "C..."
-# at-ledger-sequence = 50153603
 
 ### Staging environment configuration
 [staging.network]
@@ -76,19 +69,12 @@ name = "testnet-user"
 default = true
 
 [staging.contracts]
-# soroban-atomic-swap-contract = { id = "C123..." }
-# soroban-auth-contract = { id = "C234..." }
-# soroban-errors-contract = { id = "C345..." }
-# soroban-hello-world-contract = { id = "C456..." }
-# soroban-increment-contract = { id = "C567..." }
-# soroban-token-contract = { id = "C678..." }
-# eurc = { id = "C789..." }
 guess_the_number = { client = true, constructor_args = "--admin me", after_deploy = "reset" }
 trustline_onboard = { client = true }
 
 ### Production environment configuration
 [production.network]
-rpc-url = "https://our-custom-rpc-provider.cool"
+rpc-url = "https://soroban-rpc.mainnet.stellar.gateway.fm"
 network-passphrase = "Public Global Stellar Network ; September 2015"
 
 [[production.accounts]]
@@ -97,4 +83,5 @@ default = true
 
 [production.contracts]
 eurcv_auth = { id = "CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3" }
+# Keep this id in sync with PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID in the frontend .env.
 trustline_onboard = { id = "CDH2Z3PMBEL2T3EBM3VW5ENDPURYUY7YIKX3XMU3TK5AP4P3LXMPAGLC" }

@@ -73,7 +73,7 @@ contract instances and should not be manually edited.
   and post-deploy scripts
 - `envPrefix: "PUBLIC_"` in vite.config.ts — only env vars with this prefix are
   available in frontend code via `import.meta.env`
-- Rust toolchain pinned to 1.89.0 with `wasm32v1-none` target
+- Rust toolchain pinned to 1.95.0 with `wasm32v1-none` target
 
 ## Key Dependencies
 
