@@ -23,6 +23,13 @@ set -euo pipefail
 SOURCE="${SOURCE:-me}"
 ASSET_CODE="${ASSET_CODE:-TESTV}"
 NETWORK="${NETWORK:-testnet}"
+case "$NETWORK" in
+    testnet|futurenet|local|standalone) ;;
+    *)
+        echo "error: refusing to run against network '$NETWORK' — test/dev networks only." >&2
+        exit 1
+        ;;
+esac
 WASM="target/wasm32v1-none/release/authorizer_stub.wasm"
 
 if ! command -v stellar >/dev/null 2>&1; then
@@ -39,7 +46,7 @@ SOURCE_ADDR="$(stellar keys public-key "$SOURCE")"
 echo ">> source: $SOURCE = $SOURCE_ADDR"
 
 # Top up just in case the account was created earlier without funding.
-stellar keys fund "$SOURCE" --network "$NETWORK" >/dev/null 2>&1 || true
+stellar keys fund "$SOURCE" --network "$NETWORK" >/dev/null || true
 
 ASSET="$ASSET_CODE:$SOURCE_ADDR"
 echo ">> asset: $ASSET"

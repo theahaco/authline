@@ -37,12 +37,10 @@ lerna-debug.log*
 
 # generated contract clients
 packages/*
-!packages/eurcv_auth
 !packages/.gitkeep
 
 # generated contract client imports
 src/contracts/*
 !src/contracts/util.ts
 !src/contracts/assets.ts
-!src/contracts/eurcv_auth.ts
 tsconfig.app.tsbuildinfo

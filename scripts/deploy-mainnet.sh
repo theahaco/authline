@@ -48,7 +48,12 @@ if [[ "$confirm" != "deploy" ]]; then
 fi
 
 echo ">> building contracts"
-cargo build --release --target wasm32v1-none
+stellar contract build --optimize --package trustline-onboard
+
+if [[ ! -f "$WASM" ]]; then
+    echo "error: expected build artifact not found: $WASM" >&2
+    exit 1
+fi
 
 echo ">> deploying trustline_onboard"
 CONTRACT_ID="$(stellar contract deploy \

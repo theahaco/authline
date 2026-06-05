@@ -7,7 +7,7 @@
     "dev": "npm start",
     "start": "concurrently --kill-others-on-fail --names stellar,vite -c gray,green --pad-prefix \"stellar scaffold watch --build-clients\" \"vite\"",
     "build": "tsc -b && vite build",
-    "install:contracts": "npm install --workspace=packages && npm run build --workspace=packages",
+    "install:contracts": "if ls packages/*/package.json >/dev/null 2>&1; then npm install --workspace=packages && npm run build --workspace=packages; else echo 'No contract client packages present; skipping install:contracts.'; fi",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier . --write",

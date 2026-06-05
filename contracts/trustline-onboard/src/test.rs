@@ -94,6 +94,25 @@ fn onboard_surfaces_authorization_failure() {
 }
 
 #[test]
+fn onboard_failure_rolls_back_trustline() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let holder = Address::generate(&env);
+    let (sac_addr, onboard_addr) = setup(&env);
+
+    let authorizer = env.register(FailingAuthorizer, ());
+    let client = TrustlineOnboardClient::new(&env, &onboard_addr);
+
+    assert_eq!(
+        client.try_onboard(&sac_addr, &authorizer, &holder),
+        Err(Ok(Error::AuthorizationFailed))
+    );
+    // The authorize step failed, so the whole call (including trust) rolled back:
+    // the holder is not authorized on the SAC.
+    assert!(!StellarAssetClient::new(&env, &sac_addr).authorized(&holder));
+}
+
+#[test]
 fn onboard_rejects_when_post_condition_unmet() {
     let env = Env::default();
     env.mock_all_auths_allowing_non_root_auth();

@@ -25,6 +25,14 @@ pub struct TrustlineOnboard;
 impl TrustlineOnboard {
     /// Create the holder's trustline (CAP-73 `SAC.trust`) and authorize it via the
     /// asset's authorizer contract, in a single holder-signed transaction.
+    ///
+    /// **Atomic semantics:** All-or-nothing: if the authorize step fails, the whole
+    /// transaction (including the trustline creation) is rolled back, so the holder
+    /// pays fees but ends with no trustline.
+    ///
+    /// **Immutable by design:** This contract has no admin or upgrade entrypoint;
+    /// fixing a bug requires deploying a new instance and updating the frontend's
+    /// pinned contract id.
     pub fn onboard(
         env: Env,
         sac: Address,
