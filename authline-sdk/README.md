@@ -36,7 +36,6 @@ const xdr = await buildOnboardTx({
 
 ```tsx
 import { ActivateButton } from "@theaha/authline/react"
-
 ;<ActivateButton
 	holder={address}
 	config={config}
