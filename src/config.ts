@@ -1,5 +1,6 @@
 import {
 	resolveOfficialAsset,
+	OFFICIAL_ASSETS,
 	isValidIssuer,
 	isValidContractId,
 	type AssetCapability,
@@ -59,6 +60,9 @@ warnIfInvalid(
 )
 
 const CODE = import.meta.env.PUBLIC_ASSET_CODE ?? "EURCV"
+// Enrich the live asset display metadata from the pinned registry when its code
+// is known (env always wins); on-chain ids stay env-driven.
+const pinned = OFFICIAL_ASSETS.find((a) => a.code === CODE) ?? null
 
 /** The live, wired asset (the one the dApp actually activates on-chain). */
 export interface AssetConfig extends OnboarderConfig {
@@ -82,15 +86,20 @@ export const ASSET: AssetConfig = {
 	authorizer: import.meta.env.PUBLIC_AUTHORIZER ?? "",
 	onboard: import.meta.env.PUBLIC_ONBOARD,
 	backends: ["cap73-one-signature", "cap33-sponsored"],
-	name: import.meta.env.PUBLIC_ASSET_NAME ?? "Stellar asset",
+	name: import.meta.env.PUBLIC_ASSET_NAME ?? pinned?.name ?? "Stellar asset",
 	glyph: CODE.slice(0, 2).toUpperCase(),
-	kind: import.meta.env.PUBLIC_ASSET_KIND ?? "Stellar asset",
+	kind:
+		import.meta.env.PUBLIC_ASSET_KIND ?? pinned?.homeDomain ?? "Stellar asset",
 	networkLabel: NETWORK_LABEL,
 	capability: (import.meta.env.PUBLIC_AUTHORIZER
 		? "permissionedOneStep"
-		: "open") as AssetCapability,
-	authRevocable: import.meta.env.PUBLIC_ASSET_REVOCABLE === "true",
-	authClawback: import.meta.env.PUBLIC_ASSET_CLAWBACK === "true",
+		: (pinned?.capability ?? "open")) as AssetCapability,
+	authRevocable:
+		import.meta.env.PUBLIC_ASSET_REVOCABLE === "true" ||
+		(pinned?.authRevocable ?? false),
+	authClawback:
+		import.meta.env.PUBLIC_ASSET_CLAWBACK === "true" ||
+		(pinned?.authClawback ?? false),
 }
 
 /** Directory: the configured asset is Live; the rest are the roadmap. */
@@ -122,16 +131,7 @@ const fromRegistry = (code: string, glyph: string, kind: string): DirItem => {
 	}
 }
 
-export const ASSETS: DirItem[] = [
-	{
-		code: ASSET.assetCode,
-		name: ASSET.name,
-		glyph: ASSET.glyph,
-		kind: ASSET.kind,
-		status: "live",
-		authClawback: ASSET.authClawback,
-		authRevocable: ASSET.authRevocable,
-	},
+const roadmap: DirItem[] = [
 	fromRegistry("USDC", "US", "USD stablecoin"),
 	fromRegistry("EURC", "EC", "Euro stablecoin"),
 	fromRegistry("EURCV", "EV", "MiCA euro · SG-Forge"),
@@ -142,6 +142,20 @@ export const ASSETS: DirItem[] = [
 		kind: "Tokenized treasuries",
 		status: "soon",
 	},
+]
+
+export const ASSETS: DirItem[] = [
+	{
+		code: ASSET.assetCode,
+		name: ASSET.name,
+		glyph: ASSET.glyph,
+		kind: ASSET.kind,
+		status: "live",
+		authClawback: ASSET.authClawback,
+		authRevocable: ASSET.authRevocable,
+	},
+	// dedupe: do not list a roadmap asset that is already the live asset
+	...roadmap.filter((a) => a.code !== ASSET.assetCode),
 ]
 
 export const REPO_URL = "https://github.com/Dgetsylver/trustline-onboarder-wip"
