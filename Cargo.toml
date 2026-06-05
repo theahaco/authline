@@ -1,16 +1,20 @@
 [workspace]
-members = ["contracts/guess-the-number"]
+members = [
+    "contracts/guess-the-number",
+    "contracts/trustline-onboard",
+    "contracts/authorizer-stub",
+]
 resolver = "2"
 
 [workspace.package]
 authors = ["The Aha Company"]
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/theahaco/eurcv_auth"
+repository = "https://github.com/theahaco/stellar-assets"
 version = "0.0.1"
 
 [workspace.dependencies.soroban-sdk]
-version = "23.1.0"
+version = "26.0.0"
 
 [profile.release]
 opt-level = "z"

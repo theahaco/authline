@@ -7,8 +7,8 @@ function App() {
 	return (
 		<div className={styles.AppLayout}>
 			<Layout.Header
-				projectId="EURCV Auth"
-				projectTitle="EURCV Auth"
+				projectId="Stellar Asset Onboarding"
+				projectTitle="Stellar Asset Onboarding"
 				projectLink="https://theaha.co"
 				hasThemeSwitch={true}
 				contentRight={<ConnectAccount />}
