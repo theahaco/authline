@@ -1,75 +1,57 @@
-# Authline integrator SDK (`@theaha/authline`)
+# Authline — integrator SDK + frontend rebrand
 
-> **Proposed addition — see the PR.** This is an _integrator_ layer that wraps
-> the contracts this repo already ships. It adds **no** new contract and changes
-> **no** existing file. The on-chain authorizer stays the live `eurcv_auth`.
+This PR brings the **Authline** experience to `stellar-assets`: the
+`@theaha/authline` integrator SDK **and** the Authline landing page + activation
+dApp, wired together. The **backend is untouched** — same contracts
+(`contracts/trustline-onboard`, `authorizer-stub`), the same onboarding logic
+(`src/hooks/useOnboard.ts`, `src/contracts/assets.ts`), and authorization still
+flows through the live `eurcv_auth`. Only the **frontend/design layer** changes.
 
-`authline-sdk/` is a small, dependency-light TypeScript SDK that lets a **third
-party** (an exchange, broker, or wallet) establish a trustline **on behalf of a
-user** during a withdrawal — the core of the "Trustline Onboarder" RFP. It is
-the reference implementation of the draft standard in
-[`sep/SEP-XXXX-trustline-onboarder.md`](../sep/SEP-XXXX-trustline-onboarder.md).
+## Two parts
 
-## Why it composes with this repo unchanged
+### 1. `packages/authline-sdk/` — the integrator SDK (`@theaha/authline`)
 
-This repo already has the two on-chain pieces the SDK needs:
+A small TypeScript SDK that lets a **third party** (exchange / broker / wallet)
+establish a trustline **on behalf of a user** during a withdrawal — the core of
+the "Trustline Onboarder" RFP. It is a real workspace package (the frontend
+depends on it; `npm run build` builds it first).
 
-| Need                             | Already here                                                         |
+| Need                             | Already in this repo                                                 |
 | -------------------------------- | -------------------------------------------------------------------- |
-| One-signature create + authorize | `contracts/trustline-onboard` — `onboard(sac, authorizer, holder)`   |
-| The authorize seam               | the live **`eurcv_auth`** SAC admin — `authorize_trustline(account)` |
+| One-signature create + authorize | `contracts/trustline-onboard` → `onboard(sac, authorizer, holder)`   |
+| The authorize seam               | the live **`eurcv_auth`** SAC admin → `authorize_trustline(account)` |
 
-The SDK only ever calls those existing interfaces. There is **no Authline
-authorizer** in this PR; `authorize_trustline` is satisfied by `eurcv_auth`
-today, and by any future asset's authorizer that exposes the same one-method
-interface.
+Surface: `assetAuthRequired()` (open vs regulated detection),
+`buildSponsoredOnboardTx()` (CAP-33 sponsored, reserve-free `ChangeTrust` for a
+zero-XLM user), `buildOnboardTx()` (wraps this repo's `onboard()`),
+`buildAuthorizeTx()` (permissionless authorize-on-behalf), `onboardingRequest()`
+(SEP-7 + deep-link + hosted handoffs),
+`discoverOnboarder()`/`parseOnboarderToml()` (StrKey-validated `stellar.toml`
+discovery), a pinned `OFFICIAL_ASSETS` registry, and an optional headless
+`useActivation()` React hook. There is **no Authline authorizer** —
+`authorize_trustline` is satisfied by `eurcv_auth`.
 
-## What it adds (the integrator surface)
+### 2. The Authline frontend (landing + dApp)
 
-- **Two asset classes, detected at runtime** — `assetAuthRequired()` reads the
-  issuer's `auth_required` flag, so the flow degrades correctly for **open**
-  assets (USDC/EURC: just create the trustline) vs **regulated** ones (EURCV:
-  create + authorize-on-behalf).
-- **`buildSponsoredOnboardTx()`** — CAP-33 sponsored, reserve-free `ChangeTrust`
-  for a brand-new, zero-XLM user (the third party pays the reserve; the user
-  signs once). This is the piece a withdrawal flow needs that the dApp's
-  self-funded `changeTrust` does not cover.
-- **`buildOnboardTx()`** — wraps this repo's `onboard()` for a funded holder
-  (one signature, one tx).
-- **`buildAuthorizeTx()`** — permissionless authorize-on-behalf against the
-  authorizer (zero user/issuer signature) when the holder already has an
-  unauthorized trustline.
-- **`onboardingRequest()`** — turns any of the above into a **SEP-7** URI + a
-  wallet deep-link + a hosted-redirect URL, so the third party can hand the user
-  off to their own wallet.
-- **`discoverOnboarder()` / `parseOnboarderToml()`** — read an issuer's
-  `stellar.toml` `[TRUSTLINE_ONBOARDER]` block (one issuer config → universal
-  interop), with StrKey validation of every advertised address.
-- **Pinned registry** (`OFFICIAL_ASSETS`, `resolveOfficialAsset`) — the same
-  "never resolve an asset by code alone" defense as `src/contracts/assets.ts`,
-  reusable from the SDK.
-- **`useActivation()`** — an optional headless React hook (peer `react`).
+- `index.html` — the Authline landing page (warm rebrand, "Hold any asset. In
+  one tap.").
+- `app.html` + `src/{main,authline,config}.tsx` — the activation dApp, wired to
+  the SDK and Stellar Wallets Kit.
+- `vite.config.ts` — multi-page (`index.html` + `app.html`), keeping the
+  existing `nodePolyfills` + `wasm` plugins.
 
-## Try it
+The previous React app (`src/App.tsx`, `src/components/*`, `src/hooks/*`) is
+**kept in place** (the onboarding backend logic is preserved); the new entry
+simply mounts the Authline dApp instead.
 
-The SDK is intentionally **inert** in this repo (top-level `authline-sdk/`, not
-a workspace member) so it touches nothing in the build, lockfile, or CI. To
-adopt:
+## Build / run
 
 ```bash
-# build it standalone
-cd authline-sdk && npm install && npm run build
-
-# or move it into the workspace once you've decided to adopt it
-mv authline-sdk packages/authline-sdk
+npm ci && npm run build      # builds the SDK, then the multi-page dapp
+npm run dev                  # local dev
+node examples/exchange-withdrawal/demo.mjs        # regulated path (testnet)
+node examples/exchange-withdrawal/demo-open.mjs   # open path (testnet)
 ```
 
-Runnable references (testnet, keypairs generated at runtime — no secrets):
-
-```bash
-node examples/exchange-withdrawal/demo.mjs        # regulated (AUTH_REQUIRED) path
-node examples/exchange-withdrawal/demo-open.mjs   # open (USDC/EURC-style) path
-```
-
-See the PR description for the full rationale, the file-by-file change list, and
-the optional follow-up (contributing the asset-agnostic authorizer).
+See the PR description for the file-by-file change list, the backend-untouched
+guarantee, and the optional follow-up (the asset-agnostic authorizer contract).

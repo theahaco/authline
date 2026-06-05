@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "npm start",
     "start": "concurrently --kill-others-on-fail --names stellar,vite -c gray,green --pad-prefix \"stellar scaffold watch --build-clients\" \"vite\"",
-    "build": "tsc -b && vite build",
-    "install:contracts": "if ls packages/*/package.json >/dev/null 2>&1; then npm install --workspace=packages && npm run build --workspace=packages; else echo 'No contract client packages present; skipping install:contracts.'; fi",
+    "build": "npm run build -w @theaha/authline && tsc -b && vite build",
+    "install:contracts": "npm run build --workspaces --if-present",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier . --write",
@@ -27,7 +27,8 @@
     "lossless-json": "^4.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "zod": "^4.3.5"
+    "zod": "^4.3.5",
+    "@theaha/authline": "*"
   },
   "devDependencies": {
     "@types/lodash": "^4.17.23",
