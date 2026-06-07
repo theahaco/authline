@@ -1,5 +1,29 @@
 import { StrKey } from "@stellar/stellar-sdk"
 import { type Backend, type OnboarderConfig } from "./index.js"
+import {
+	netFromPassphrase,
+	reconcileWithRegistry,
+	type StellarNet,
+} from "./registry.js"
+
+/** Reject anything that is not a bare hostname[:port] (no scheme/path/userinfo). */
+const HOSTNAME_RE = /^[a-z0-9.-]+(:\d+)?$/i
+/** A stellar.toml far larger than this is abnormal; cap before parsing. */
+const MAX_TOML_BYTES = 100_000
+
+export interface DiscoverOptions {
+	/**
+	 * The network the discovered asset will be used on. When set, the result is
+	 * reconciled against the pinned registry: a curated code whose advertised
+	 * issuer/SAC/authorizer differ from the pinned values is REJECTED (throws).
+	 * Pass this (a `StellarNet` or a network passphrase) for any flow that builds
+	 * a signed transaction from the result — otherwise the config is the issuer's
+	 * UNVERIFIED self-advertisement.
+	 */
+	network?: StellarNet | string
+	/** Override `fetch` (tests / custom agents). */
+	fetchImpl?: typeof fetch
+}
 
 /**
  * Discover an issuer's Trustline Onboarder support from its domain's
@@ -16,15 +40,38 @@ import { type Backend, type OnboarderConfig } from "./index.js"
  * ONBOARD_WRAPPER = "C..."     # one-signature CAP-73 wrapper
  * BACKENDS = ["cap73-onesig", "cap33-sponsored"]
  * ```
+ *
+ * SECURITY: the returned config is the issuer's self-advertisement. StrKey
+ * validation proves the ids are well-formed, NOT that they are the *right* ids.
+ * Pass `opts.network` so the result is reconciled against the pinned registry
+ * before it is ever used to build a signed transaction. Never pass a `domain`
+ * sourced from untrusted user input on a server (SSRF).
  */
 export async function discoverOnboarder(
 	domain: string,
-	fetchImpl: typeof fetch = fetch,
+	opts: DiscoverOptions = {},
 ): Promise<OnboarderConfig | null> {
-	const url = `https://${domain.replace(/\/$/, "")}/.well-known/stellar.toml`
-	const res = await fetchImpl(url)
+	const host = domain.trim().replace(/\/+$/, "")
+	if (!HOSTNAME_RE.test(host) || host.includes(".."))
+		throw new Error(`discoverOnboarder: invalid domain '${domain}'`)
+	const fetchImpl = opts.fetchImpl ?? fetch
+	const res = await fetchImpl(`https://${host}/.well-known/stellar.toml`)
 	if (!res.ok) return null
-	return parseOnboarderToml(await res.text())
+	const text = await res.text()
+	if (text.length > MAX_TOML_BYTES)
+		throw new Error("discoverOnboarder: stellar.toml exceeds size cap")
+	const config = parseOnboarderToml(text)
+	if (config && opts.network != null) {
+		const net: StellarNet =
+			opts.network === "PUBLIC" ||
+			opts.network === "TESTNET" ||
+			opts.network === "FUTURENET" ||
+			opts.network === "LOCAL"
+				? opts.network
+				: netFromPassphrase(opts.network)
+		return reconcileWithRegistry(config, net)
+	}
+	return config
 }
 
 /** Parse the `[TRUSTLINE_ONBOARDER]` block out of a stellar.toml document. */
@@ -92,8 +139,13 @@ function sectionBody(toml: string, name: string): string | null {
 }
 
 function str(block: string, key: string): string {
-	const m = block.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, "m"))
-	return m ? m[1] : ""
+	// Accept double- or single-quoted TOML string values (both are valid TOML).
+	// NOTE: this is a minimal line scanner, not a full TOML parser — multi-line
+	// arrays and inline tables are out of scope; use a real parser for those.
+	const m = block.match(
+		new RegExp(`^\\s*${key}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "m"),
+	)
+	return m ? (m[1] ?? m[2] ?? "") : ""
 }
 function arr(block: string, key: string): string[] {
 	const m = block.match(new RegExp(`^\\s*${key}\\s*=\\s*\\[([^\\]]*)\\]`, "m"))

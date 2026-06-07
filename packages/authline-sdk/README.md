@@ -13,10 +13,17 @@ npm install @theaha/authline
 ```ts
 import { discoverOnboarder } from "@theaha/authline"
 
-// Reads https://theaha.co/.well-known/stellar.toml -> [TRUSTLINE_ONBOARDER]
-const config = await discoverOnboarder("theaha.co")
+// Reads https://theaha.co/.well-known/stellar.toml -> [TRUSTLINE_ONBOARDER].
+// Always pass `network` for any flow that builds a signed tx: the result is
+// then reconciled against the pinned registry, so a spoofed stellar.toml whose
+// ids differ from the curated values is rejected (throws) instead of trusted.
+const config = await discoverOnboarder("theaha.co", { network: passphrase })
 // { assetCode: "EURCV", assetIssuer: "G...", sac: "C...", authorizer: "C...", onboard: "C...", backends: [...] }
 ```
+
+> Without `network`, `discoverOnboarder` returns the issuer's **unverified**
+> self-advertisement. StrKey validation proves the ids are well-formed, not that
+> they are the right ids — reconcile against the registry before signing.
 
 ## Build the one-signature transaction
 

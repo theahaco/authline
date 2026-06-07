@@ -1,5 +1,8 @@
 ## Preamble
 
+<!-- TODO before submitting to stellar/stellar-protocol: replace `SEP: XXXX`
+     (the editors assign the number) and the `Discussion:` [placeholder] URL. -->
+
 ```
 SEP: XXXX
 Title: Trustline Onboarder
@@ -538,7 +541,7 @@ Example (regulated asset, denylist / open-by-default):
 VERSION = "0.2"
 ASSET_CODE = "EURCV"
 ASSET_ISSUER = "GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G"
-SAC = "C…"                          # SAC for EURCV
+SAC = "CANKBYNNAYKEZXLB655F2UPNTAZFK5HILZUXL7ZTFR3NF6LKDSVY7KFH"   # SAC for EURCV
 AUTHORIZER = "CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3"
 ONBOARD_WRAPPER = "C…"              # Trustline Onboard wrapper
 POLICY = "denylist"
@@ -560,11 +563,16 @@ BACKENDS = ["cap33-sponsored", "cap73-onesig"]
 SPONSOR = "G…"
 ```
 
-> The `AUTHORIZER` value above is the live `eurcv_auth` mainnet admin contract
-> (`CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3`). `SAC` and
-> `ONBOARD_WRAPPER` are shown as placeholders pending the asset-agnostic
-> deployment delivered by the grant. Testnet reference deployments are listed in
-> the Reference Implementation section.
+> The `AUTHORIZER` and `SAC` values above are the live mainnet EURCV contracts
+> (`eurcv_auth` admin `CB2DHZ…KSB3`; SAC `CANKBYNN…7KFH`), pinned and verified
+> in the SDK registry. `ONBOARD_WRAPPER` is shown as a placeholder pending the
+> asset-agnostic deployment delivered by the grant. Testnet reference
+> deployments are listed in the Reference Implementation section.
+>
+> Wire-token note: `BACKENDS` uses the short form `cap73-onesig`; the SDK's
+> `Backend` type is the canonical `cap73-one-signature`, and
+> `parseOnboarderToml` normalizes the wire token to it. Match on the SDK enum,
+> not the wire literal.
 
 ### 7. Integrator interface and handoffs
 
@@ -803,7 +811,7 @@ This SEP introduces no protocol change and is **purely additive**.
 ## Reference Implementation
 
 The public reference implementation (work in progress for SCF #44) is at
-[github.com/Dgetsylver/trustline-onboarder-wip](https://github.com/Dgetsylver/trustline-onboarder-wip)
+[github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)
 (Apache-2.0).
 
 | Component                                                                                                                                                                                                                                                                        | Status                                                                                                    | Reference                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -814,7 +822,7 @@ The public reference implementation (work in progress for SCF #44) is at
 | Asset-agnostic **Trustline Authorizer** (testnet)                                                                                                                                                                                                                                | **DEPLOYED + WORKING on testnet** (this grant)                                                            | `CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Trustline Onboard** CAP-73 wrapper (testnet)                                                                                                                                                                                                                                   | **DEPLOYED + WORKING on testnet** (this grant)                                                            | `CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Test asset **TLO** (`AUTH_REQUIRED`) — SAC / issuer                                                                                                                                                                                                                              | testnet                                                                                                   | SAC `CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3`, issuer `GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `@theaha/authline` integrator SDK (`discover`, `assetAuthRequired`, `status`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                                                                              | [github.com/Dgetsylver/trustline-onboarder-wip](https://github.com/Dgetsylver/trustline-onboarder-wip)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@theaha/authline` integrator SDK (`discover`, `assetAuthRequired`, `status`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                                                                              | [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 #### Proven on testnet
 

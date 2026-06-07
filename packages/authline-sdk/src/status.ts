@@ -21,8 +21,19 @@ export async function assetAuthRequired(args: {
 	try {
 		const issuer = await horizon.loadAccount(args.assetIssuer)
 		return !!issuer.flags?.auth_required
-	} catch {
-		return false
+	} catch (e) {
+		// Only a 404 (issuer account does not exist) is a definitive "no auth
+		// required". A transient/network/5xx error is NOT — failing open here
+		// would silently downgrade a regulated asset to the no-authorize path
+		// and produce an unauthorized, unusable trustline. Rethrow so callers
+		// fail loud (or prefer the pinned registry capability for known assets).
+		const status = (e as { response?: { status?: number } })?.response?.status
+		if (status === 404) return false
+		throw e instanceof Error
+			? e
+			: new Error(
+					`assetAuthRequired: could not load issuer ${args.assetIssuer}`,
+				)
 	}
 }
 

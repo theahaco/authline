@@ -9,7 +9,11 @@ import {
 	HANA_ID,
 } from "@creit.tech/stellar-wallets-kit"
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
-import { buildOnboardTx, getActivationStatus } from "@theaha/authline"
+import {
+	buildOnboardTx,
+	getActivationStatus,
+	isValidIssuer,
+} from "@theaha/authline"
 import { useCallback, useEffect, useState } from "react"
 import { ASSET, ASSETS, NETWORK, REPO_URL, type DirItem } from "./config.js"
 
@@ -39,8 +43,17 @@ const explorerBase = IS_PUBLIC
 const txUrl = (h: string) => `${explorerBase}/tx/${h}`
 const acctUrl = (a: string) => `${explorerBase}/account/${a}`
 
+// Map the configured passphrase to the wallet kit's network. WalletNetwork's
+// enum values ARE the passphrases, so an exact match is correct for public /
+// testnet / futurenet / standalone — instead of collapsing every non-mainnet
+// network to TESTNET, which makes wallets reject the real-passphrase tx locally.
+const WALLET_NETWORK =
+	(Object.values(WalletNetwork).find((v) => v === NETWORK.passphrase) as
+		| WalletNetwork
+		| undefined) ?? WalletNetwork.TESTNET
+
 const kit = new StellarWalletsKit({
-	network: IS_PUBLIC ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
+	network: WALLET_NETWORK,
 	selectedWalletId: FREIGHTER_ID,
 	modules: allowAllModules(),
 })
@@ -745,7 +758,7 @@ export function AuthlineApp() {
 	useEffect(() => {
 		let cancelled = false
 		const a = new URLSearchParams(window.location.search).get("address")
-		if (a && a.length === 56) {
+		if (a && isValidIssuer(a)) {
 			setAddress(a)
 			getActivationStatus({
 				horizonUrl: NETWORK.horizonUrl,
@@ -825,11 +838,16 @@ export function AuthlineApp() {
 			)
 			if (sent.status === "ERROR")
 				throw new Error("Transaction submission failed")
+			// Bound the confirmation poll: a tx that never lands must surface an
+			// error instead of leaving the UI stuck on "Submitting…" forever.
+			const deadline = Date.now() + 180_000
 			let got = await server.getTransaction(sent.hash)
-			while (got.status === "NOT_FOUND") {
+			while (got.status === "NOT_FOUND" && Date.now() < deadline) {
 				await sleep(1100)
 				got = await server.getTransaction(sent.hash)
 			}
+			if (got.status === "NOT_FOUND")
+				throw new Error("Transaction not confirmed within 180s — try again")
 			if (got.status !== "SUCCESS")
 				throw new Error(`Transaction ${got.status.toLowerCase()}`)
 			setHash(sent.hash)

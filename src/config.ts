@@ -1,6 +1,6 @@
 import {
 	resolveOfficialAsset,
-	OFFICIAL_ASSETS,
+	netFromPassphrase,
 	isValidIssuer,
 	isValidContractId,
 	type AssetCapability,
@@ -60,9 +60,11 @@ warnIfInvalid(
 )
 
 const CODE = import.meta.env.PUBLIC_ASSET_CODE ?? "EURCV"
-// Enrich the live asset display metadata from the pinned registry when its code
-// is known (env always wins); on-chain ids stay env-driven.
-const pinned = OFFICIAL_ASSETS.find((a) => a.code === CODE) ?? null
+// Resolve the pinned registry entry by (code, network) — never by code alone, so
+// a known code on testnet does not pick up a mainnet asset's name/clawback flags.
+// Env always wins for display; on-chain ids prefer env and fall back to the
+// registry-verified pinned ids so a known asset is fully wired.
+const pinned = resolveOfficialAsset(CODE, netFromPassphrase(NETWORK.passphrase))
 
 /** The live, wired asset (the one the dApp actually activates on-chain). */
 export interface AssetConfig extends OnboarderConfig {
@@ -82,8 +84,8 @@ export const ASSET: AssetConfig = {
 	assetIssuer:
 		import.meta.env.PUBLIC_ASSET_ISSUER ??
 		"GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G",
-	sac: import.meta.env.PUBLIC_SAC ?? "",
-	authorizer: import.meta.env.PUBLIC_AUTHORIZER ?? "",
+	sac: import.meta.env.PUBLIC_SAC ?? pinned?.sac ?? "",
+	authorizer: import.meta.env.PUBLIC_AUTHORIZER ?? pinned?.authorizer ?? "",
 	onboard: import.meta.env.PUBLIC_ONBOARD,
 	backends: ["cap73-one-signature", "cap33-sponsored"],
 	name: import.meta.env.PUBLIC_ASSET_NAME ?? pinned?.name ?? "Stellar asset",
@@ -101,6 +103,20 @@ export const ASSET: AssetConfig = {
 		import.meta.env.PUBLIC_ASSET_CLAWBACK === "true" ||
 		(pinned?.authClawback ?? false),
 }
+
+// A regulated (permissionedOneStep) asset needs both its SAC and authorizer to
+// build the one-signature onboard tx. Surface a misconfiguration loudly here —
+// missing PUBLIC_* wiring or an absent registry entry — instead of failing
+// opaquely deep inside transaction building.
+if (
+	ASSET.capability === "permissionedOneStep" &&
+	(!ASSET.sac || !ASSET.authorizer)
+)
+	console.error(
+		`[config] ${ASSET.assetCode} is permissionedOneStep but is missing ` +
+			`${!ASSET.sac ? "SAC " : ""}${!ASSET.authorizer ? "authorizer" : ""}`.trim() +
+			" — set PUBLIC_SAC / PUBLIC_AUTHORIZER, or add it to the pinned registry.",
+	)
 
 /** Directory: the configured asset is Live; the rest are the roadmap. */
 export interface DirItem {
@@ -158,4 +174,4 @@ export const ASSETS: DirItem[] = [
 	...roadmap.filter((a) => a.code !== ASSET.assetCode),
 ]
 
-export const REPO_URL = "https://github.com/Dgetsylver/trustline-onboarder-wip"
+export const REPO_URL = "https://github.com/theahaco/stellar-assets"
