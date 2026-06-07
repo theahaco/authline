@@ -111,6 +111,8 @@ async function main() {
 		networkPassphrase: NET.passphrase,
 		userAddress: user.publicKey(),
 		msg: "Receive OPENX",
+		// hostedBase must be an origin the integrator controls (no default).
+		hostedBase: "https://onboard.example/app.html",
 	})
 	console.log("   handoff the exchange would give the user:")
 	console.log("     SEP-7  :", req.sep7Uri.slice(0, 70) + "…")

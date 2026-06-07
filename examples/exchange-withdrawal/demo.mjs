@@ -113,6 +113,8 @@ async function main() {
 		networkPassphrase: NET.passphrase,
 		userAddress: user.publicKey(),
 		msg: "Activate TLO",
+		// hostedBase must be an origin the integrator controls (no default).
+		hostedBase: "https://onboard.example/app.html",
 	})
 	console.log("   the exchange would hand the user one of:")
 	console.log("     SEP-7   :", req.sep7Uri.slice(0, 72) + "…")
@@ -128,9 +130,12 @@ async function main() {
 		"• Step 2/2 — authorize-on-behalf (permissionless; NO user signature, NO issuer signature).",
 	)
 	await sleep(6000) // let the new trustline propagate to the RPC's ledger snapshot
-	// The SDK's buildAuthorizeTx() builds this exact call; we submit it via the Rust
+	// The SDK's buildAuthorizeTx() builds this same authorize_trustline call, but
+	// this demo does NOT invoke the SDK builder here: it submits via the Rust
 	// `stellar` CLI, which is authoritative on Protocol 26 (the JS @stellar/stellar-sdk
-	// Soroban *response* codec does not yet decode P26 trustline-write simulations).
+	// Soroban *response* codec does not yet decode P26 trustline-write simulations,
+	// so buildAuthorizeTx's prepare step cannot complete on testnet today).
+	// Requires the `stellar` CLI on PATH, configured for testnet.
 	const r = spawnSync(
 		"stellar",
 		[
@@ -149,6 +154,11 @@ async function main() {
 		],
 		{ encoding: "utf8" },
 	)
+	if (r.error?.code === "ENOENT")
+		throw new Error(
+			"the `stellar` CLI is required for this demo but was not found on PATH — " +
+				"install it (https://github.com/stellar/stellar-cli) and configure testnet.",
+		)
 	if (r.status !== 0)
 		throw new Error(
 			"authorize failed: " + (r.stderr || r.stdout || "").slice(-400),

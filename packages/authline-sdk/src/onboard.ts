@@ -7,6 +7,20 @@ import {
 } from "@stellar/stellar-sdk"
 import { type OnboarderConfig } from "./index.js"
 
+/**
+ * Allow cleartext http only for a local RPC (localhost / 127.0.0.1) unless the
+ * caller explicitly overrides `allowHttp`. Keeps the secure default for remote
+ * RPC while letting local/standalone dev (http RPC) work without a footgun.
+ */
+export function defaultAllowHttp(rpcUrl: string): boolean {
+	try {
+		const h = new URL(rpcUrl).hostname
+		return h === "localhost" || h === "127.0.0.1"
+	} catch {
+		return false
+	}
+}
+
 export interface BuildOnboardOptions {
 	/** Soroban RPC URL. */
 	rpcUrl: string
@@ -31,6 +45,13 @@ export interface BuildOnboardOptions {
  * Note: CAP-73 `trust()` has no sponsorship — the holder must control a funded,
  * on-ledger account that can cover the 0.5 XLM trustline reserve. For a brand-new
  * or under-funded account, use the CAP-33 sponsored path instead.
+ *
+ * SECURITY: `config` carries the on-chain ids (`sac`, `authorizer`, `onboard`)
+ * the holder will authorize in one signature. If it originated from
+ * `discoverOnboarder` (an issuer-advertised, untrusted stellar.toml), it MUST be
+ * reconciled against the pinned registry first — pass `network` to
+ * `discoverOnboarder` or call `reconcileWithRegistry` — or a spoofed toml can
+ * redirect the trustline/authorize to attacker-controlled contracts.
  */
 export async function buildOnboardTx(
 	opts: BuildOnboardOptions,
@@ -48,7 +69,7 @@ export async function buildOnboardTx(
 		)
 	}
 	const server = new rpc.Server(opts.rpcUrl, {
-		allowHttp: opts.allowHttp ?? false,
+		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
 	})
 	const source = await server.getAccount(opts.holder)
 

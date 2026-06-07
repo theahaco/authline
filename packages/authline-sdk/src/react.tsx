@@ -1,6 +1,6 @@
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import { useCallback, useState } from "react"
-import { buildOnboardTx } from "./onboard.js"
+import { buildOnboardTx, defaultAllowHttp } from "./onboard.js"
 import { type OnboarderConfig } from "./index.js"
 
 export type ActivationState =
@@ -52,20 +52,33 @@ export function useActivation(args: UseActivationArgs) {
 
 				setState("submitting")
 				const server = new rpc.Server(args.rpcUrl, {
-					allowHttp: args.allowHttp ?? false,
+					allowHttp: args.allowHttp ?? defaultAllowHttp(args.rpcUrl),
 				})
 				const signed = TransactionBuilder.fromXDR(
 					signedTxXdr,
 					args.networkPassphrase,
 				)
 				const sent = await server.sendTransaction(signed)
+				if (sent.status === "ERROR")
+					throw new Error(
+						sent.errorResult?.result().toString() ??
+							"sendTransaction returned ERROR",
+					)
 				setHash(sent.hash)
 
+				// Bound the confirmation poll: a dropped / expired / mempool-evicted
+				// tx must surface an error rather than hang the hook forever (mirrors
+				// the backend pollForSuccess 180s deadline).
+				const deadline = Date.now() + 180_000
 				let got = await server.getTransaction(sent.hash)
-				while (got.status === "NOT_FOUND") {
+				while (got.status === "NOT_FOUND" && Date.now() < deadline) {
 					await new Promise((r) => setTimeout(r, 1000))
 					got = await server.getTransaction(sent.hash)
 				}
+				if (got.status === "NOT_FOUND")
+					throw new Error(
+						"activation timed out: transaction not confirmed within 180s",
+					)
 				if (got.status !== "SUCCESS")
 					throw new Error(`activation failed: ${got.status}`)
 				setState("success")

@@ -146,3 +146,45 @@ export function resolveOfficialAsset(
 		OFFICIAL_ASSETS.find((a) => a.code === code && a.network === net) ?? null
 	)
 }
+
+/** Minimal shape reconciled against the registry (a discovered onboarder config). */
+export interface ReconcilableConfig {
+	assetCode: string
+	assetIssuer: string
+	sac: string
+	authorizer?: string
+}
+
+/**
+ * Reconcile an advertised/discovered config against the pinned registry. This is
+ * the enforcement half of the anti-copycat defense: when the asset code is
+ * curated for `net`, every on-chain id (issuer, SAC, authorizer) MUST equal the
+ * pinned value, or this throws — refusing to let a spoofed `stellar.toml`
+ * redirect a trustline/authorize to attacker-controlled ids. When the code is
+ * NOT curated there is nothing to pin against, so the config is returned
+ * unchanged (callers should treat uncurated assets with extra caution).
+ *
+ * Returns the same config on success so it can be used inline.
+ */
+export function reconcileWithRegistry<T extends ReconcilableConfig>(
+	config: T,
+	net: StellarNet,
+): T {
+	const pinned = resolveOfficialAsset(config.assetCode, net)
+	if (!pinned) return config
+	const assertEq = (
+		field: string,
+		got: string | undefined,
+		want: string | undefined,
+	): void => {
+		if (want && got && got !== want)
+			throw new Error(
+				`registry: discovered ${config.assetCode} ${field} ${got} does not match ` +
+					`the pinned value ${want} — refusing a possibly-spoofed onboarder config`,
+			)
+	}
+	assertEq("issuer", config.assetIssuer, pinned.issuer)
+	assertEq("SAC", config.sac, pinned.sac)
+	assertEq("authorizer", config.authorizer, pinned.authorizer)
+	return config
+}

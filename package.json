@@ -5,9 +5,10 @@
   "private": true,
   "scripts": {
     "dev": "npm start",
+    "prestart": "npm run build -w @theaha/authline",
     "start": "concurrently --kill-others-on-fail --names stellar,vite -c gray,green --pad-prefix \"stellar scaffold watch --build-clients\" \"vite\"",
     "build": "npm run build -w @theaha/authline && tsc -b && vite build",
-    "install:contracts": "npm run build --workspaces --if-present",
+    "install:contracts": "if ls packages/*/package.json >/dev/null 2>&1; then npm run build --workspaces --if-present; else echo 'No contract client packages present; skipping install:contracts.'; fi",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier . --write",
@@ -19,19 +20,14 @@
   ],
   "dependencies": {
     "@creit.tech/stellar-wallets-kit": "^1.9.5",
-    "@stellar/design-system": "^3.2.7",
     "@stellar/stellar-sdk": "^14.4.3",
     "@stellar/stellar-xdr-json": "^23.0.0",
-    "@tanstack/react-query": "^5.90.17",
+    "@theaha/authline": "^0.2.0",
     "@theahaco/ts-config": "^1.2.0",
-    "lossless-json": "^4.3.0",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "zod": "^4.3.5",
-    "@theaha/authline": "*"
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "@types/lodash": "^4.17.23",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",

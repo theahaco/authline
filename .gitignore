@@ -38,6 +38,9 @@ lerna-debug.log*
 # generated contract clients
 packages/*
 !packages/.gitkeep
+# hand-authored, first-class SDK (not a generated client)
+!packages/authline-sdk
+!packages/authline-sdk/**
 
 # generated contract client imports
 src/contracts/*

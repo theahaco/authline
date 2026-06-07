@@ -53,5 +53,11 @@ node examples/exchange-withdrawal/demo.mjs        # regulated path (testnet)
 node examples/exchange-withdrawal/demo-open.mjs   # open path (testnet)
 ```
 
+> `demo.mjs` (the regulated path) additionally requires the Rust
+> [`stellar` CLI](https://github.com/stellar/stellar-cli) on your `PATH`,
+> configured for testnet: it submits the `authorize_trustline` call via the CLI
+> because the JS SDK cannot yet decode Protocol 26 trustline-write simulations.
+> `demo-open.mjs` is pure JS and needs no CLI.
+
 See the PR description for the file-by-file change list, the backend-untouched
 guarantee, and the optional follow-up (the asset-agnostic authorizer contract).

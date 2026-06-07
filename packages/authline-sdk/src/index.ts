@@ -41,12 +41,14 @@ export {
 	validateOfficialAsset,
 	assetsForNetwork,
 	resolveOfficialAsset,
+	reconcileWithRegistry,
 	netFromPassphrase,
 	isValidIssuer,
 	isValidContractId,
 	type OfficialAsset,
 	type AssetCapability,
 	type StellarNet,
+	type ReconcilableConfig,
 } from "./registry.js"
 export { buildOnboardTx, type BuildOnboardOptions } from "./onboard.js"
 export {

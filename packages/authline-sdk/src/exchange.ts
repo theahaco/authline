@@ -9,6 +9,7 @@ import {
 	TransactionBuilder,
 	rpc,
 } from "@stellar/stellar-sdk"
+import { defaultAllowHttp } from "./onboard.js"
 import { type OnboarderConfig } from "./index.js"
 
 /**
@@ -39,7 +40,7 @@ export async function buildAuthorizeTx(opts: {
 	allowHttp?: boolean
 }): Promise<string> {
 	const server = new rpc.Server(opts.rpcUrl, {
-		allowHttp: opts.allowHttp ?? false,
+		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
 	})
 	const src = await server.getAccount(opts.source)
 	const authorizer = new Contract(opts.config.authorizer)
@@ -66,6 +67,12 @@ export async function buildAuthorizeTx(opts: {
  * `buildAuthorizeTx` (run by the integrator, no user signature) to authorize.
  *
  * Signers required on the returned XDR: `sponsor` (begin-sponsor) + `user`.
+ *
+ * SECURITY: `config.assetCode`/`assetIssuer` become the `ChangeTrust` asset the
+ * user signs. If `config` came from `discoverOnboarder`, reconcile it against
+ * the pinned registry first (pass `network` to `discoverOnboarder`, or call
+ * `reconcileWithRegistry`) so a spoofed `stellar.toml` cannot trick the user
+ * into trusting a counterfeit issuer for a well-known code.
  */
 export async function buildSponsoredOnboardTx(opts: {
 	horizonUrl: string
@@ -101,8 +108,12 @@ export interface OnboardingRequest {
 	sep7Uri: string
 	/** Wallet deep-link (SEP-7 is the registered scheme). */
 	deepLink: string
-	/** Hosted Authline activation page, prefilled for the user. */
-	hostedUrl: string
+	/**
+	 * Hosted activation page, prefilled for the user — present ONLY when the
+	 * caller supplies `hostedBase` (an origin they control). There is no default
+	 * host: an integrator must opt into a hosting origin explicitly.
+	 */
+	hostedUrl?: string
 }
 
 /**
@@ -126,15 +137,12 @@ export function onboardingRequest(opts: {
 	if (opts.callback) params.set("callback", opts.callback)
 	if (opts.msg) params.set("msg", opts.msg)
 	const sep7 = `web+stellar:tx?${params.toString()}`
-	const base = (
-		opts.hostedBase ??
-		"https://dgetsylver.github.io/trustline-onboarder-wip/app.html"
-	).replace(/\/$/, "")
-	return {
-		sep7Uri: sep7,
-		deepLink: sep7,
-		hostedUrl: `${base}?address=${encodeURIComponent(opts.userAddress)}`,
+	const out: OnboardingRequest = { sep7Uri: sep7, deepLink: sep7 }
+	if (opts.hostedBase) {
+		const base = opts.hostedBase.replace(/\/$/, "")
+		out.hostedUrl = `${base}?address=${encodeURIComponent(opts.userAddress)}`
 	}
+	return out
 }
 
 /** Convenience: rebuild a sponsor `Account` object (sequence) from a raw value. */
