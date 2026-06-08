@@ -23,4 +23,16 @@ export default [
 			},
 		},
 	},
+	{
+		files: [
+			"**/*.test.ts",
+			"tests/**/*.{ts,tsx}",
+			"scripts/**/*.mjs",
+			"vitest.config.ts",
+			"playwright.config.ts",
+		],
+		languageOptions: {
+			globals: { ...globals.node },
+		},
+	},
 ]
