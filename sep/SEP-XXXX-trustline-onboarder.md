@@ -11,7 +11,7 @@ Track: Standard
 Status: Draft
 Created: 2026-06-04
 Discussion: https://github.com/stellar/stellar-protocol/discussions/[placeholder]
-Version: 0.2
+Version: 0.3
 ```
 
 ## Simple Summary
@@ -541,7 +541,7 @@ Example (regulated asset, denylist / open-by-default):
 VERSION = "0.2"
 ASSET_CODE = "EURCV"
 ASSET_ISSUER = "GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G"
-SAC = "CANKBYNNAYKEZXLB655F2UPNTAZFK5HILZUXL7ZTFR3NF6LKDSVY7KFH"   # SAC for EURCV
+SAC = "C…"                          # SAC for EURCV
 AUTHORIZER = "CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3"
 ONBOARD_WRAPPER = "C…"              # Trustline Onboard wrapper
 POLICY = "denylist"
@@ -563,16 +563,11 @@ BACKENDS = ["cap33-sponsored", "cap73-onesig"]
 SPONSOR = "G…"
 ```
 
-> The `AUTHORIZER` and `SAC` values above are the live mainnet EURCV contracts
-> (`eurcv_auth` admin `CB2DHZ…KSB3`; SAC `CANKBYNN…7KFH`), pinned and verified
-> in the SDK registry. `ONBOARD_WRAPPER` is shown as a placeholder pending the
-> asset-agnostic deployment delivered by the grant. Testnet reference
-> deployments are listed in the Reference Implementation section.
->
-> Wire-token note: `BACKENDS` uses the short form `cap73-onesig`; the SDK's
-> `Backend` type is the canonical `cap73-one-signature`, and
-> `parseOnboarderToml` normalizes the wire token to it. Match on the SDK enum,
-> not the wire literal.
+> The `AUTHORIZER` value above is the live `eurcv_auth` mainnet admin contract
+> (`CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3`). `SAC` and
+> `ONBOARD_WRAPPER` are shown as placeholders pending the asset-agnostic
+> deployment delivered by the grant. Testnet reference deployments are listed in
+> the Reference Implementation section.
 
 ### 7. Integrator interface and handoffs
 
@@ -580,7 +575,11 @@ A conformant integrator implements the following surface (the reference
 implementation is the `@theaha/authline` TypeScript SDK):
 
 - `discover(toml)` — parse the issuer's `stellar.toml` `[TRUSTLINE_ONBOARDER]`
-  block into a config. One config, any integrator.
+  block into a config, **StrKey-validating** every advertised address. One
+  config, any integrator.
+- `resolveOfficialAsset(code, net)` — resolve against a curated,
+  **issuer-pinned** registry (never by code alone): the anti-copycat defense
+  aligned with `stellar-assets`.
 - `assetAuthRequired(issuer)` — read the issuer's `auth_required` flag to
   classify the asset (open vs. regulated) and decide whether the authorize step
   applies (§1).
@@ -593,6 +592,9 @@ implementation is the `@theaha/authline` TypeScript SDK):
   (Case A; no holder/issuer signature).
 - `buildOnboardTx(...)` — build the CAP-73 one-transaction `onboard()` (Backend
   1 / Case C).
+- `buildTrustTx(...)` — build the CAP-73 `SAC.trust(holder)` transaction for an
+  **open** asset (one holder signature, no authorizer; the holder pays the
+  reserve — for a zero-XLM user use `buildSponsoredOnboardTx` instead).
 - `onboardingRequest(...)` — produce the **handoffs**: a **SEP-7**
   `web+stellar:` URI, a wallet **deep link**, and a **hosted-redirect URL**. An
   exchange withdrawal screen hands the user off via any of these; a Stellar
@@ -810,39 +812,46 @@ This SEP introduces no protocol change and is **purely additive**.
 
 ## Reference Implementation
 
-The public reference implementation (work in progress for SCF #44) is at
+The canonical public reference implementation is at
 [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)
-(Apache-2.0).
+(Apache-2.0): the contracts, the `@theaha/authline` SDK, the Authline dApp
+(deployed at `theahaco.github.io/stellar-assets`), this SEP, and the demos. The
+live `eurcv_auth` authorizer is the production precursor.
 
-| Component                                                                                                                                                                                                                                                                        | Status                                                                                                    | Reference                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `eurcv_auth` Trustline Authorizer (denylist, set as SAC admin; `authorize_trustline`, `add/remove_banned_accounts`, `freeze/unfreeze_accounts`, `deauthorize_trustline`, `clawback`, `mint_to_account`, `pause/unpause`, `upgrade`)                                              | **LIVE on mainnet**                                                                                       | `theahaco/eurcv_auth` (repo private — available on request); mainnet contract [`CB2DHZ…KSB3` on Stellar Expert](https://stellar.expert/explorer/public/contract/CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3); activation page `https://eurcv.theaha.co` (currently a two-step / two-transaction flow, not yet one-signature)                                                                                                                                                                                                                                                                                 |
-| `onboard()` one-signature wrapper over CAP-73 `trust()`                                                                                                                                                                                                                          | **MERGED** (public; 2026-06-05) — contract-level tested; live one-signature run + mainnet rollout pending | [github.com/theahaco/stellar-assets PR #10](https://github.com/theahaco/stellar-assets/pull/10) — _"Multi-asset Stellar asset onboarding (Protocol 26 / CAP-73 one-step)."_ Ships a generic `onboard(sac, authorizer, holder)` (de-EURCV-ified to an `Authorizer` trait) + a curated, issuer-pinned registry (USDC/EURC/EURCV). `cargo test` covers the success path, an `AuthorizationFailed` case, and a `NotAuthorized` post-condition under mocked auth against a stub authorizer — proving the contract-level composition, **not** a live single real signature (an explicitly unchecked box in the PR's test plan). |
-| Contract Admin SEP (`Administratable` + `Upgradable`) — built upon by §3                                                                                                                                                                                                         | Draft                                                                                                     | [github.com/theahaco/admin-sep](https://github.com/theahaco/admin-sep) (SDF discussion #1670)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Asset-agnostic **Trustline Authorizer** (testnet)                                                                                                                                                                                                                                | **DEPLOYED + WORKING on testnet** (this grant)                                                            | `CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **Trustline Onboard** CAP-73 wrapper (testnet)                                                                                                                                                                                                                                   | **DEPLOYED + WORKING on testnet** (this grant)                                                            | `CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Test asset **TLO** (`AUTH_REQUIRED`) — SAC / issuer                                                                                                                                                                                                                              | testnet                                                                                                   | SAC `CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3`, issuer `GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `@theaha/authline` integrator SDK (`discover`, `assetAuthRequired`, `status`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                                                                              | [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Component                                                                                                                                                                                                                                          | Status                           | Reference                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eurcv_auth` Trustline Authorizer (denylist, SAC admin; `authorize_trustline`, ban/freeze, `deauthorize_trustline`, `clawback`, `mint`, `pause`, `upgrade`)                                                                                        | **LIVE on mainnet**              | mainnet contract [`CB2DHZ…KSB3`](https://stellar.expert/explorer/public/contract/CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3); `eurcv.theaha.co` (currently two-step, not yet one-signature); `theahaco/eurcv_auth` (repo private — available on request)          |
+| `onboard()` one-signature CAP-73 wrapper — `onboard(sac, authorizer, holder)` + `NotAuthorized` post-condition                                                                                                                                     | **MERGED + deployed on mainnet** | `theahaco/stellar-assets` (PR #10 / #12); mainnet contract [`CDH2Z3PM…AGLC`](https://stellar.expert/explorer/public/contract/CDH2Z3PMBEL2T3EBM3VW5ENDPURYUY7YIKX3XMU3TK5AP4P3LXMPAGLC); `cargo test` green; the live one-signature run on a real wallet remains to be exercised |
+| `@theaha/authline` integrator SDK + Authline dApp (`discover`, `assetAuthRequired`, `status`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`; pinned registry + StrKey validation + `reconcileWithRegistry`) | **MERGED**                       | `theahaco/stellar-assets` (PR #13 / #14); security-reviewed by Willem Wyndham; CI green; dApp at `theahaco.github.io/stellar-assets`                                                                                                                                            |
+| Open-asset onboarding — `buildTrustTx` (CAP-73 `SAC.trust(holder)`) + testnet USDC + e2e suite                                                                                                                                                     | **IN REVIEW**                    | `theahaco/stellar-assets` PR #16 — the `trust()` decode is verified on testnet (tx `523d7ad5…`)                                                                                                                                                                                 |
+| Asset-agnostic **Trustline Authorizer** (denylist + allowlist, generalizing `eurcv_auth`)                                                                                                                                                          | **THIS GRANT** (T1 / D1.1)       | `theahaco/stellar-assets` — the one core contract not yet in the repo                                                                                                                                                                                                           |
+| Contract Admin SEP (`Administratable` + `Upgradable`) — built upon by §3                                                                                                                                                                           | Draft                            | [github.com/theahaco/admin-sep](https://github.com/theahaco/admin-sep) (SDF discussion #1670)                                                                                                                                                                                   |
 
 #### Proven on testnet
 
-A reference exchange-withdrawal demo establishes an **authorized** trustline for
-a brand-new **zero-XLM** user against the test asset **TLO** (`AUTH_REQUIRED`):
+The `examples/exchange-withdrawal/` demos establish authorized trustlines for
+**both** asset classes (fresh keypairs each run — no committed secrets):
 
-1. Sponsored trustline creation (exchange pays the reserve, user signs once) —
-   tx `b001cc0f183b5a554b2abb004f0f424227e728354917aafae5aa0fee390464e8`.
-2. Authorize-on-behalf (no user or issuer signature) — tx
-   `2a1257b2eac34114e0face7f07080bb602c85d573deddd59401a29f55eca6479`.
+- **Regulated (`AUTH_REQUIRED`), Case B** — a third party onboards a brand-new
+  **zero-XLM** user: sponsored create (user signs once) — tx
+  `b001cc0f183b5a554b2abb004f0f424227e728354917aafae5aa0fee390464e8` — plus
+  authorize-on-behalf (no user or issuer signature) — tx
+  `2a1257b2eac34114e0face7f07080bb602c85d573deddd59401a29f55eca6479`. Final:
+  `hasTrustline = true`, `isAuthorized = true`.
+- **Open (non-`AUTH_REQUIRED`)** — CAP-73 `SAC.trust(holder)`, one signature, no
+  authorizer — tx
+  `523d7ad5d5585521f0b4b61d1ec007dd97c97458f0be87bd36aec19a36073a2d`,
+  `isAuthorized = true`.
 
-Final state: `hasTrustline = true`, `isAuthorized = true`. Both transactions are
-verifiable on Stellar Expert (testnet).
+All transactions are verifiable on Stellar Expert (testnet).
 
-> **Honest caveat (P26 JS-SDK decode).** The JavaScript `@stellar/stellar-sdk`
-> (15.1.0) cannot yet **decode** a Protocol-26 Soroban simulation that **writes
-> a trustline flag**, so the on-chain authorize-on-behalf is **submitted** via
-> the Rust `stellar` CLI / RPC for now. The JS SDK **builds** the correct
-> transaction, and the classic flows (sponsored trustline, status, SEP-7) work
-> in pure JS. This resolves when upstream ships Protocol-26 decode support; it
+> **Honest caveat (P26 JS-SDK decode — narrow).** The JavaScript
+> `@stellar/stellar-sdk` cannot yet **decode** a Protocol-26 Soroban simulation
+> that **writes a trustline _authorization_ flag** (the `set_authorized` step),
+> so authorize-on-behalf is **submitted** via the Rust `stellar` CLI / RPC for
+> now. The open-asset `trust()` path and the classic flows (sponsored trustline,
+> status, SEP-7) decode in **pure JS**. The JS SDK **builds** the correct
+> transaction. This resolves when upstream ships Protocol-26 decode support; it
 > does not affect the on-chain interface this SEP defines.
 
 CAP-73 is the protocol dependency:
@@ -853,5 +862,6 @@ CAP-73 is the protocol dependency:
 
 | Version | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.3     | 2026-06-08 | Consolidated the reference implementation onto `theahaco/stellar-assets` (the SDK + Authline dApp merged via PR #13 / #14, security-reviewed; the CAP-73 onboard wrapper deployed on mainnet). Added the open-asset `buildTrustTx` (CAP-73 `SAC.trust`) integrator method + its verified-on-testnet decode; narrowed the P26 JS-decode caveat to the authorize flag-write only.                                                                                             |
 | 0.2     | 2026-06-04 | Reframed around third-party onboarding; added the two asset classes (open vs. regulated) and asset-class detection via `auth_required`; added the three onboarding cases (A zero-sig / B sponsored one-tap / C CAP-73 one-tx); added the integrator interface and SEP-7 / deep-link / hosted-redirect handoffs; documented (b)/(c) as situational alternatives; added testnet deployment ids, the proven testnet exchange-withdrawal run, and the P26 JS-SDK decode caveat. |
 | 0.1     | 2026       | Initial draft. Defined roles, denylist/allowlist authorization-delegation interface (built on `admin-sep`), CAP-73 one-signature `onboard()` composition, the freeze = ban/disallow + deauthorize lifecycle and per-call policy evaluation, two reserve backends (CAP-73 funded-holder / CAP-33 sponsored), `[TRUSTLINE_ONBOARDER]` `stellar.toml` discovery block, activation flow, and audit events.                                                                      |
