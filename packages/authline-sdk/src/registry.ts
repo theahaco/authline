@@ -85,6 +85,22 @@ export const OFFICIAL_ASSETS: OfficialAsset[] = [
 		authClawback: true,
 		verifiedAt: "2026-06-04",
 	},
+	{
+		// Testnet entry: issuer + flags verified via Horizon (2026-06-08); the SAC
+		// is the deterministic `Asset.contractId(TESTNET)` id (same derivation that
+		// reproduces every pinned mainnet SAC), deployed on testnet. Testnet has no
+		// scam-issuer risk, so a derived+deployed SAC is acceptable here.
+		code: "USDC",
+		issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+		sac: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+		capability: "open",
+		name: "USD Coin",
+		network: "TESTNET",
+		homeDomain: "centre.io",
+		authRevocable: true,
+		authClawback: false,
+		verifiedAt: "2026-06-08",
+	},
 ]
 
 /**
