@@ -3,18 +3,1292 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<link rel="icon" type="image/x-icon" href="./favicon.ico" />
-		<title>Scaffold Stellar Starter App</title>
+		<title>Authline — Hold any Stellar asset in one tap</title>
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
-			href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Inconsolata:wght@500&display=swap"
+			href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600&display=swap"
 			rel="stylesheet"
 		/>
-		<script type="module" crossorigin src="./assets/index-CKAy7gMO.js"></script>
-		<link rel="stylesheet" crossorigin href="./assets/index-68fWBfS6.css">
+		<link rel="icon" href="./favicon.svg" />
+		<meta
+			name="description"
+			content="Hold any AUTH_REQUIRED Stellar asset in one signature — create + authorize a trustline in one tap (CAP-73)."
+		/>
+		<meta
+			property="og:title"
+			content="Authline — Hold any Stellar asset in one tap"
+		/>
+		<meta
+			property="og:description"
+			content="One signature to create and authorize a trustline. Regulated assets onboard without the wait."
+		/>
+		<meta property="og:image" content="./banner.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<style>
+			:root {
+				--paper: #f3ede1;
+				--paper-2: #f8f4ec;
+				--card: #ffffff;
+				--ink: #1c1813;
+				--ink-2: #46403a;
+				--mut: #7c7264;
+				--mut-2: #a89c8b;
+				--line: #e4dac8;
+				--line-2: #ede5d7;
+				--green: #16734a;
+				--green-bright: #1c9460;
+				--mint: #e5efe4;
+				--mint-line: #c2dec6;
+				--clay: #b5532e;
+				--disp: "Bricolage Grotesque", system-ui, sans-serif;
+				--body: "Hanken Grotesk", system-ui, sans-serif;
+				--maxw: 1120px;
+				--pad: clamp(20px, 5vw, 64px);
+			}
+			* {
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0;
+			}
+			html {
+				scroll-behavior: smooth;
+			}
+			body {
+				background: var(--paper);
+				color: var(--ink);
+				font-family: var(--body);
+				-webkit-font-smoothing: antialiased;
+				line-height: 1.55;
+				overflow-x: hidden;
+			}
+			a {
+				color: inherit;
+				text-decoration: none;
+			}
+			.wrap {
+				max-width: var(--maxw);
+				margin: 0 auto;
+				padding-left: var(--pad);
+				padding-right: var(--pad);
+			}
+			h1,
+			h2,
+			h3,
+			h4 {
+				font-family: var(--disp);
+				font-weight: 600;
+				letter-spacing: -0.02em;
+				line-height: 1.04;
+			}
+
+			/* nav */
+			header {
+				position: sticky;
+				top: 0;
+				z-index: 40;
+				background: rgba(243, 237, 225, 0.86);
+				backdrop-filter: blur(10px);
+				border-bottom: 1px solid var(--line);
+			}
+			.nav {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				height: 66px;
+			}
+			.brand {
+				display: flex;
+				align-items: center;
+				gap: 11px;
+			}
+			.brand .wm {
+				font-family: var(--disp);
+				font-weight: 700;
+				font-size: 20px;
+				letter-spacing: -0.03em;
+			}
+			.links {
+				display: flex;
+				align-items: center;
+				gap: 30px;
+				font-size: 15px;
+				color: var(--ink-2);
+				white-space: nowrap;
+			}
+			.links a:not(.cta):hover {
+				color: var(--green);
+			}
+			.cta {
+				display: inline-flex;
+				align-items: center;
+				gap: 7px;
+				white-space: nowrap;
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 14.5px;
+				cursor: pointer;
+				border: none;
+				transition:
+					transform 0.12s,
+					box-shadow 0.2s,
+					background 0.2s;
+			}
+			.cta:active {
+				transform: translateY(1px);
+			}
+			.cta-fill {
+				background: var(--green);
+				color: #fff;
+				padding: 10px 17px;
+				border-radius: 11px;
+				box-shadow: 0 6px 16px -8px rgba(22, 115, 74, 0.7);
+			}
+			.cta-fill:hover {
+				background: var(--green-bright);
+				box-shadow: 0 10px 22px -8px rgba(22, 115, 74, 0.6);
+			}
+			.cta-line {
+				background: transparent;
+				color: var(--ink);
+				border: 1px solid var(--line);
+				padding: 10px 17px;
+				border-radius: 11px;
+			}
+			.cta-line:hover {
+				border-color: var(--green);
+				color: var(--green);
+			}
+			@media (max-width: 780px) {
+				.links a:not(.cta) {
+					display: none;
+				}
+			}
+
+			/* hero */
+			.hero {
+				padding: clamp(40px, 7vw, 86px) 0 clamp(48px, 7vw, 90px);
+			}
+			.herogrid {
+				display: grid;
+				grid-template-columns: 1.08fr 0.92fr;
+				gap: clamp(36px, 5vw, 76px);
+				align-items: center;
+			}
+			.kicker {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				white-space: nowrap;
+				font-family: var(--body);
+				font-weight: 500;
+				font-size: 14px;
+				color: var(--green);
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+				padding: 6px 13px;
+				border-radius: 999px;
+			}
+			.kicker .dot {
+				width: 6px;
+				height: 6px;
+				border-radius: 50%;
+				background: var(--green-bright);
+			}
+			h1 {
+				font-size: clamp(40px, 6.6vw, 76px);
+				margin: 22px 0 0;
+				max-width: 11ch;
+				text-wrap: balance;
+			}
+			.hero .sub {
+				font-size: clamp(17px, 1.7vw, 20px);
+				line-height: 1.55;
+				color: var(--ink-2);
+				max-width: 46ch;
+				margin-top: 22px;
+			}
+			.hero .sub b {
+				color: var(--ink);
+				font-weight: 600;
+			}
+			.hrow {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 13px;
+				margin-top: 32px;
+			}
+			.hrow .cta-fill,
+			.hrow .cta-line {
+				padding: 14px 22px;
+				font-size: 15.5px;
+				border-radius: 13px;
+			}
+			.reassure {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px 22px;
+				margin-top: 30px;
+				color: var(--mut);
+				font-size: 14.5px;
+			}
+			.reassure span {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+			}
+			.reassure .tick {
+				color: var(--green-bright);
+				font-weight: 600;
+			}
+
+			/* product mock */
+			.mock {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 26px;
+				padding: 26px;
+				box-shadow:
+					0 30px 60px -36px rgba(40, 30, 15, 0.4),
+					0 2px 0 rgba(255, 255, 255, 0.6) inset;
+			}
+			.mock .mh {
+				display: flex;
+				align-items: center;
+				gap: 13px;
+				padding-bottom: 20px;
+				border-bottom: 1px solid var(--line-2);
+			}
+			.mglyph {
+				width: 46px;
+				height: 46px;
+				border-radius: 14px;
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-family: var(--disp);
+				font-weight: 700;
+				font-size: 16px;
+				color: var(--green);
+			}
+			.mock .mt {
+				line-height: 1.3;
+			}
+			.mock .mt .a {
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 16px;
+			}
+			.mock .mt .b {
+				font-size: 13px;
+				color: var(--mut);
+			}
+			.mstatus {
+				margin-left: auto;
+				font-family: var(--body);
+				font-weight: 600;
+				font-size: 11.5px;
+				color: var(--green);
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+				padding: 5px 11px;
+				border-radius: 999px;
+			}
+			.mbody {
+				padding-top: 20px;
+			}
+			.mline {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 11px 0;
+				font-size: 14px;
+			}
+			.mline .k {
+				color: var(--mut);
+			}
+			.mline .v {
+				font-family: var(--disp);
+				font-weight: 500;
+				color: var(--ink);
+			}
+			.mbtn {
+				margin-top: 16px;
+				width: 100%;
+				background: var(--green);
+				color: #fff;
+				border: none;
+				border-radius: 13px;
+				padding: 15px;
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 15.5px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 9px;
+				cursor: pointer;
+				transition: background 0.2s;
+			}
+			.mbtn:hover {
+				background: var(--green-bright);
+			}
+			.mdone {
+				margin-top: 16px;
+				display: flex;
+				align-items: center;
+				gap: 11px;
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+				border-radius: 13px;
+				padding: 14px 16px;
+			}
+			.mdone .ring {
+				width: 26px;
+				height: 26px;
+				border-radius: 50%;
+				background: var(--green);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+			}
+			.mdone .ring svg {
+				width: 14px;
+				height: 14px;
+				stroke: #fff;
+				fill: none;
+				stroke-width: 2.6;
+			}
+			.mdone .dt {
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 14.5px;
+				color: var(--green);
+			}
+			.mdone .dd {
+				font-size: 12.5px;
+				color: var(--ink-2);
+			}
+			.mfoot {
+				margin-top: 18px;
+				text-align: center;
+				font-size: 12px;
+				color: var(--mut-2);
+			}
+			@media (max-width: 860px) {
+				.herogrid {
+					grid-template-columns: 1fr;
+					gap: 44px;
+				}
+				.mock {
+					max-width: 420px;
+				}
+			}
+
+			/* section scaffold */
+			section.sec {
+				padding: clamp(54px, 8vw, 104px) 0;
+			}
+			.sec.alt {
+				background: var(--paper-2);
+				border-top: 1px solid var(--line);
+				border-bottom: 1px solid var(--line);
+			}
+			.lede {
+				max-width: 50ch;
+				margin-bottom: clamp(34px, 4.5vw, 56px);
+			}
+			.lede .e- {
+				display: block;
+			}
+			.tagrow {
+				font-family: var(--body);
+				font-weight: 600;
+				font-size: 13.5px;
+				color: var(--green);
+				margin-bottom: 14px;
+			}
+			h2 {
+				font-size: clamp(28px, 4vw, 46px);
+				max-width: 16ch;
+				text-wrap: balance;
+			}
+			.lede p {
+				font-size: clamp(16px, 1.6vw, 18.5px);
+				line-height: 1.6;
+				color: var(--ink-2);
+				margin-top: 18px;
+			}
+
+			/* assets */
+			.assetgrid {
+				display: grid;
+				grid-template-columns: repeat(4, 1fr);
+				gap: 14px;
+			}
+			.acard {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 20px;
+				padding: 22px;
+				display: flex;
+				flex-direction: column;
+				gap: 16px;
+				transition:
+					transform 0.2s,
+					box-shadow 0.2s;
+			}
+			.acard:hover {
+				transform: translateY(-3px);
+				box-shadow: 0 18px 36px -26px rgba(40, 30, 15, 0.5);
+			}
+			.acard.soon {
+				background: transparent;
+				box-shadow: none;
+			}
+			.acard.soon:hover {
+				transform: none;
+			}
+			.aglyph {
+				width: 48px;
+				height: 48px;
+				border-radius: 14px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-family: var(--disp);
+				font-weight: 700;
+				font-size: 15px;
+			}
+			.acard.live .aglyph {
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+				color: var(--green);
+			}
+			.acard.soon .aglyph {
+				background: #efe8da;
+				border: 1px solid var(--line);
+				color: var(--mut);
+			}
+			.acode {
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 19px;
+			}
+			.aname {
+				font-size: 13px;
+				color: var(--mut);
+				margin-top: 5px;
+				line-height: 1.45;
+			}
+			.abadge {
+				font-family: var(--body);
+				font-weight: 600;
+				font-size: 11.5px;
+				padding: 5px 11px;
+				border-radius: 999px;
+				width: fit-content;
+			}
+			.abadge.live {
+				color: var(--green);
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+			}
+			.abadge.soon {
+				color: var(--mut);
+				border: 1px solid var(--line);
+			}
+			.rnote {
+				margin-top: 26px;
+				font-size: 16px;
+				line-height: 1.6;
+				color: var(--ink-2);
+				max-width: 60ch;
+			}
+			.rnote b {
+				color: var(--ink);
+				font-weight: 600;
+			}
+			.rnote a {
+				color: var(--green);
+				font-weight: 600;
+			}
+			.rnote a:hover {
+				text-decoration: underline;
+			}
+			@media (max-width: 820px) {
+				.assetgrid {
+					grid-template-columns: repeat(2, 1fr);
+				}
+			}
+			@media (max-width: 460px) {
+				.assetgrid {
+					grid-template-columns: 1fr;
+				}
+			}
+
+			/* before / after */
+			.ba {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 16px;
+				margin-top: 8px;
+			}
+			.bacard {
+				border-radius: 20px;
+				padding: 24px 26px;
+			}
+			.bacard.before {
+				background: var(--card);
+				border: 1px solid var(--line);
+			}
+			.bacard.after {
+				background: var(--ink);
+				border: 1px solid var(--ink);
+			}
+			.bacard h4 {
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 14px;
+				letter-spacing: 0;
+				margin-bottom: 18px;
+				display: flex;
+				align-items: center;
+				gap: 9px;
+			}
+			.bacard.before h4 {
+				color: var(--mut);
+			}
+			.bacard.after h4 {
+				color: var(--mint);
+			}
+			.baline {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				padding: 10px 0;
+				font-size: 15px;
+			}
+			.bacard.before .baline {
+				color: var(--ink-2);
+			}
+			.bacard.after .baline {
+				color: #f1ece2;
+			}
+			.ban {
+				flex-shrink: 0;
+				width: 22px;
+				height: 22px;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 11px;
+			}
+			.bacard.before .ban {
+				background: #efe8da;
+				color: var(--mut);
+			}
+			.bacard.after .ban {
+				background: var(--green);
+				color: #fff;
+			}
+			.bacard.before .baline.x {
+				color: var(--mut-2);
+			}
+			@media (max-width: 680px) {
+				.ba {
+					grid-template-columns: 1fr;
+				}
+			}
+
+			/* steps */
+			.steps {
+				display: grid;
+				grid-template-columns: repeat(3, 1fr);
+				gap: clamp(20px, 3vw, 38px);
+				margin-top: 8px;
+			}
+			.step {
+				display: flex;
+				flex-direction: column;
+				gap: 13px;
+			}
+			.step .sn {
+				font-family: var(--disp);
+				font-weight: 700;
+				font-size: 15px;
+				color: var(--green);
+				width: 38px;
+				height: 38px;
+				border-radius: 50%;
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.step h3 {
+				font-size: 21px;
+				margin-top: 4px;
+			}
+			.step p {
+				font-size: 15.5px;
+				line-height: 1.55;
+				color: var(--ink-2);
+				max-width: 32ch;
+			}
+			@media (max-width: 720px) {
+				.steps {
+					grid-template-columns: 1fr;
+					gap: 26px;
+				}
+			}
+
+			/* issuers */
+			.iss {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: clamp(34px, 5vw, 68px);
+				align-items: center;
+			}
+			.isscopy p {
+				font-size: 16.5px;
+				line-height: 1.6;
+				color: var(--ink-2);
+				margin-top: 18px;
+			}
+			.isscopy p b {
+				color: var(--ink);
+				font-weight: 600;
+			}
+			.policy {
+				display: flex;
+				flex-direction: column;
+				gap: 14px;
+			}
+			.pcard {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 18px;
+				padding: 22px 24px;
+				transition:
+					transform 0.2s,
+					box-shadow 0.2s;
+			}
+			.pcard:hover {
+				transform: translateY(-2px);
+				box-shadow: 0 16px 32px -26px rgba(40, 30, 15, 0.5);
+			}
+			.pcard .ph {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				margin-bottom: 10px;
+			}
+			.pcard h4 {
+				font-family: var(--disp);
+				font-weight: 600;
+				font-size: 18px;
+			}
+			.pcard .pb {
+				font-family: var(--body);
+				font-weight: 600;
+				font-size: 11.5px;
+				color: var(--green);
+				background: var(--mint);
+				border: 1px solid var(--mint-line);
+				border-radius: 999px;
+				padding: 4px 11px;
+			}
+			.pcard p {
+				font-size: 15px;
+				line-height: 1.55;
+				color: var(--ink-2);
+			}
+			@media (max-width: 820px) {
+				.iss {
+					grid-template-columns: 1fr;
+					gap: 34px;
+				}
+			}
+
+			/* proof band */
+			.proof {
+				display: grid;
+				grid-template-columns: 1.15fr 0.85fr;
+				gap: clamp(34px, 5vw, 64px);
+				align-items: center;
+			}
+			.proofq {
+				font-family: var(--disp);
+				font-weight: 500;
+				font-size: clamp(22px, 2.8vw, 32px);
+				line-height: 1.26;
+				letter-spacing: -0.015em;
+			}
+			.proofq em {
+				font-style: normal;
+				color: var(--green);
+			}
+			.facts {
+				display: flex;
+				flex-direction: column;
+			}
+			.fact {
+				display: flex;
+				justify-content: space-between;
+				gap: 18px;
+				padding: 15px 0;
+				border-bottom: 1px solid var(--line);
+				font-size: 14.5px;
+			}
+			.fact:first-child {
+				border-top: 1px solid var(--line);
+			}
+			.fact .k {
+				color: var(--mut);
+			}
+			.fact .v {
+				font-family: var(--disp);
+				font-weight: 500;
+				color: var(--ink);
+				text-align: right;
+			}
+			@media (max-width: 760px) {
+				.proof {
+					grid-template-columns: 1fr;
+					gap: 30px;
+				}
+			}
+
+			/* closing */
+			.closing {
+				text-align: center;
+				padding: clamp(72px, 10vw, 128px) 0;
+			}
+			.closing h2 {
+				margin: 0 auto;
+				max-width: 16ch;
+			}
+			.closing p {
+				margin: 20px auto 0;
+				max-width: 42ch;
+				font-size: 18px;
+				color: var(--ink-2);
+			}
+			.closing .hrow {
+				justify-content: center;
+				margin-top: 30px;
+			}
+
+			/* footer */
+			footer {
+				border-top: 1px solid var(--line);
+				padding: 38px 0;
+				background: var(--paper-2);
+			}
+			.foot {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				flex-wrap: wrap;
+				gap: 16px;
+				color: var(--mut);
+				font-size: 14px;
+			}
+			.foot .fl {
+				display: flex;
+				gap: 24px;
+			}
+			.foot a:hover {
+				color: var(--green);
+			}
+
+			/* reveal */
+			.reveal {
+				opacity: 0;
+				transform: translateY(20px);
+				transition:
+					opacity 0.7s cubic-bezier(0.2, 0.7, 0.3, 1),
+					transform 0.7s cubic-bezier(0.2, 0.7, 0.3, 1);
+			}
+			.reveal.in {
+				opacity: 1;
+				transform: none;
+			}
+			@media (prefers-reduced-motion: reduce) {
+				.reveal {
+					opacity: 1;
+					transform: none;
+				}
+			}
+		</style>
 	</head>
 	<body>
-		<div id="root"></div>
+		<template id="__bundler_thumbnail">
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+				<rect width="100" height="100" fill="#F3EDE1" />
+				<rect
+					x="16"
+					y="36"
+					width="68"
+					height="30"
+					rx="15"
+					fill="none"
+					stroke="#16734A"
+					stroke-width="6"
+				/>
+				<circle cx="66" cy="51" r="11" fill="#16734A" />
+			</svg>
+		</template>
+
+		<header>
+			<div class="wrap nav">
+				<a class="brand" href="#top">
+					<svg
+						width="30"
+						height="30"
+						viewBox="0 0 100 100"
+						fill="none"
+						aria-hidden="true"
+					>
+						<rect
+							x="14"
+							y="33"
+							width="72"
+							height="34"
+							rx="17"
+							stroke="#16734A"
+							stroke-width="6.5"
+						/>
+						<circle cx="67" cy="50" r="12.5" fill="#16734A" />
+					</svg>
+					<span class="wm">Authline</span>
+				</a>
+				<nav class="links">
+					<a href="#how">How it works</a>
+					<a href="#assets">Assets</a>
+					<a href="#issuers">For issuers</a>
+					<a class="cta cta-fill launch" href="./app.html">Launch app</a>
+				</nav>
+			</div>
+		</header>
+
+		<main id="top">
+			<!-- HERO -->
+			<section class="hero">
+				<div class="wrap herogrid">
+					<div>
+						<span class="kicker reveal"
+							><span class="dot"></span> For everyone receiving money on
+							Stellar</span
+						>
+						<h1 class="reveal">Hold any asset. In one tap.</h1>
+						<p class="sub reveal">
+							Getting a new token on Stellar usually means a confusing “create a
+							trustline” prompt — and for regulated money, a separate wait to be
+							approved. <b>Authline makes it one tap.</b> Connect, confirm,
+							done.
+						</p>
+						<div class="hrow reveal">
+							<a class="cta cta-fill" href="./app.html">Try it now</a>
+							<a class="cta cta-line" href="#how">See how it works</a>
+						</div>
+						<div class="reassure reveal">
+							<span><span class="tick">✓</span> One signature</span>
+							<span><span class="tick">✓</span> Your keys, always</span>
+							<span><span class="tick">✓</span> Live on Stellar today</span>
+						</div>
+					</div>
+
+					<!-- activation mock -->
+					<div class="mock reveal" id="mock">
+						<div class="mh">
+							<div class="mglyph" id="mGlyph">EU</div>
+							<div class="mt">
+								<div class="a" id="mName">EUR CoinVertible</div>
+								<div class="b" id="mIssuer">by Société Générale-Forge</div>
+							</div>
+							<span class="mstatus">Ready to add</span>
+						</div>
+						<div class="mbody">
+							<div class="mline">
+								<span class="k">Asset</span
+								><span class="v" id="mCode">EURCV</span>
+							</div>
+							<div class="mline">
+								<span class="k">Network</span
+								><span class="v">Stellar · Mainnet</span>
+							</div>
+							<div class="mline">
+								<span class="k">You pay</span
+								><span class="v">≈ 0.00005 XLM fee</span>
+							</div>
+							<button class="mbtn" id="mBtn" type="button">
+								<span id="mBtnText">Activate EURCV</span>
+							</button>
+							<div class="mdone" id="mDone" style="display: none">
+								<span class="ring"
+									><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" /></svg
+								></span>
+								<div>
+									<div class="dt">
+										<span id="mDoneCode">EURCV</span> is ready
+									</div>
+									<div class="dd">Authorized and ready to receive.</div>
+								</div>
+							</div>
+							<div class="mfoot">Authline never touches your keys.</div>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- ASSETS -->
+			<section class="sec alt" id="assets">
+				<div class="wrap">
+					<div class="lede reveal">
+						<div class="tagrow">The assets people actually hold</div>
+						<h2>Built for real money on Stellar.</h2>
+						<p>
+							EURCV is live and onboarding holders today. More of the assets
+							people are bringing on-chain are next in line.
+						</p>
+					</div>
+					<div class="assetgrid">
+						<div class="acard live reveal">
+							<div class="aglyph">EU</div>
+							<div>
+								<div class="acode">EURCV</div>
+								<div class="aname">
+									EUR CoinVertible · Société Générale-Forge
+								</div>
+							</div>
+							<span class="abadge live">● Live now</span>
+						</div>
+						<div class="acard soon reveal">
+							<div class="aglyph">US</div>
+							<div>
+								<div class="acode">USDC</div>
+								<div class="aname">USD Coin · Circle</div>
+							</div>
+							<span class="abadge soon">Coming soon</span>
+						</div>
+						<div class="acard soon reveal">
+							<div class="aglyph">BE</div>
+							<div>
+								<div class="acode">BENJI</div>
+								<div class="aname">
+									Franklin OnChain money fund · Franklin Templeton
+								</div>
+							</div>
+							<span class="abadge soon">Coming soon</span>
+						</div>
+						<div class="acard soon reveal">
+							<div class="aglyph">EC</div>
+							<div>
+								<div class="acode">EURC</div>
+								<div class="aname">Euro Coin · Circle</div>
+							</div>
+							<span class="abadge soon">Coming soon</span>
+						</div>
+					</div>
+					<p class="rnote reveal">
+						Authline isn’t built around one token.
+						<b>Any issuer can list a Stellar asset</b> by publishing a small,
+						standard config — no gatekeeper, no waiting list.
+						<a href="./app.html">Open the directory →</a>
+					</p>
+				</div>
+			</section>
+
+			<!-- HOW IT WORKS -->
+			<section class="sec" id="how">
+				<div class="wrap">
+					<div class="lede reveal">
+						<div class="tagrow">How it works</div>
+						<h2>Set up an asset in about a minute.</h2>
+						<p>
+							No jargon, no waiting room. You stay in control the whole time —
+							Authline only ever asks for a single signature.
+						</p>
+					</div>
+					<div class="ba reveal">
+						<div class="bacard before">
+							<h4>The usual way</h4>
+							<div class="baline">
+								<span class="ban">1</span> “Create a trustline?” — for what?
+							</div>
+							<div class="baline">
+								<span class="ban">2</span> Sign, and hope it’s right
+							</div>
+							<div class="baline">
+								<span class="ban">3</span> Wait for the issuer to approve you
+							</div>
+							<div class="baline x">
+								<span class="ban">4</span> Maybe your withdrawal goes through
+							</div>
+						</div>
+						<div class="bacard after">
+							<h4>With Authline</h4>
+							<div class="baline">
+								<span class="ban">1</span> Tap “Activate”
+							</div>
+							<div class="baline">
+								<span class="ban">2</span> Confirm once in your wallet
+							</div>
+							<div class="baline">
+								<span class="ban">3</span> You’re ready to receive — instantly
+							</div>
+						</div>
+					</div>
+					<div class="steps" style="margin-top: clamp(40px, 5vw, 60px)">
+						<div class="step reveal">
+							<div class="sn">1</div>
+							<h3>Connect</h3>
+							<p>
+								Open the app and connect any Stellar wallet — Freighter, xBull,
+								Lobstr and more.
+							</p>
+						</div>
+						<div class="step reveal">
+							<div class="sn">2</div>
+							<h3>Confirm once</h3>
+							<p>
+								A single signature adds the asset and gets it approved in the
+								same step. You just cover the tiny network fee.
+							</p>
+						</div>
+						<div class="step reveal">
+							<div class="sn">3</div>
+							<h3>You’re in</h3>
+							<p>
+								The asset is live on your account. Withdrawals clear and you can
+								receive right away.
+							</p>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- ISSUERS -->
+			<section class="sec alt" id="issuers">
+				<div class="wrap iss">
+					<div class="isscopy reveal">
+						<div class="tagrow">For issuers &amp; exchanges</div>
+						<h2>Set the rules once. Approvals run themselves.</h2>
+						<p>
+							Instead of a person signing off on every new holder, you
+							<b>set your policy up front</b> — and Authline enforces it
+							automatically, in the open, on a ledger anyone can audit.
+						</p>
+						<p>
+							That’s what lets regulated issuers bring compliant assets to
+							Stellar without a human in the loop for every withdrawal. List
+							your asset by publishing one standard config block.
+						</p>
+					</div>
+					<div class="policy reveal">
+						<div class="pcard">
+							<div class="ph">
+								<h4>Open by default</h4>
+								<span class="pb">Stablecoins</span>
+							</div>
+							<p>
+								Anyone can activate instantly, and you keep the power to block
+								bad actors. Great for open stablecoins that just need
+								frictionless onboarding.
+							</p>
+						</div>
+						<div class="pcard">
+							<div class="ph">
+								<h4>Approved holders only</h4>
+								<span class="pb">Securities</span>
+							</div>
+							<p>
+								Only people you’ve cleared can activate — built for KYC’d or
+								regulated assets where every holder is vetted first.
+							</p>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- PROOF -->
+			<section class="sec" id="proof">
+				<div class="wrap proof">
+					<div class="reveal">
+						<p class="proofq">
+							Authline builds on infrastructure that’s
+							<em>already live on Stellar mainnet</em> — powering EURCV, the
+							euro stablecoin from Société Générale-Forge. It’s the first asset
+							of many.
+						</p>
+					</div>
+					<div class="facts reveal">
+						<div class="fact">
+							<span class="k">Status</span
+							><span class="v">Live on mainnet</span>
+						</div>
+						<div class="fact">
+							<span class="k">Live today</span><span class="v">EURCV</span>
+						</div>
+						<div class="fact">
+							<span class="k">Onboarding next</span
+							><span class="v">USDC · BENJI · EURC</span>
+						</div>
+						<div class="fact">
+							<span class="k">Built for</span
+							><span class="v">Wallets · Exchanges · Issuers</span>
+						</div>
+						<div class="fact">
+							<span class="k">Open source</span
+							><span class="v">Apache-2.0</span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- CLOSING -->
+			<section class="closing">
+				<div class="wrap">
+					<h2 class="reveal">Add your first asset in under a minute.</h2>
+					<p class="reveal">
+						See the whole thing end to end — connect a wallet and activate in a
+						single tap.
+					</p>
+					<div class="hrow reveal">
+						<a class="cta cta-fill" href="./app.html">Try it now</a>
+						<a
+							class="cta cta-line"
+							href="https://github.com/theahaco/stellar-assets"
+							>View on GitHub</a
+						>
+					</div>
+				</div>
+			</section>
+		</main>
+
+		<footer>
+			<div class="wrap foot">
+				<div class="brand">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 100 100"
+						fill="none"
+						aria-hidden="true"
+					>
+						<rect
+							x="14"
+							y="33"
+							width="72"
+							height="34"
+							rx="17"
+							stroke="#16734A"
+							stroke-width="6.5"
+						/>
+						<circle cx="67" cy="50" r="12.5" fill="#16734A" />
+					</svg>
+					<span style="font-family: var(--disp); font-weight: 700"
+						>Authline</span
+					>
+				</div>
+				<div class="fl">
+					<a href="#how">How it works</a>
+					<a href="#issuers">For issuers</a>
+					<a href="./app.html">Launch app</a>
+					<a href="https://github.com/theahaco/stellar-assets">GitHub</a>
+				</div>
+				<span style="color: var(--mut-2); font-size: 13px"
+					>One signature on Stellar</span
+				>
+			</div>
+		</footer>
+
+		<script>
+			// Mock: cycle the hero card through real assets, and let Activate play out.
+			const ASSETS = [
+				{
+					code: "EURCV",
+					glyph: "EU",
+					name: "EUR CoinVertible",
+					issuer: "by Société Générale-Forge",
+				},
+				{ code: "USDC", glyph: "US", name: "USD Coin", issuer: "by Circle" },
+				{
+					code: "BENJI",
+					glyph: "BE",
+					name: "Franklin OnChain",
+					issuer: "by Franklin Templeton",
+				},
+				{ code: "EURC", glyph: "EC", name: "Euro Coin", issuer: "by Circle" },
+			]
+			let mi = 0,
+				busy = false
+			const $ = (id) => document.getElementById(id)
+			function paint(a) {
+				$("mGlyph").textContent = a.glyph
+				$("mName").textContent = a.name
+				$("mIssuer").textContent = a.issuer
+				$("mCode").textContent = a.code
+				$("mBtnText").textContent = "Activate " + a.code
+				$("mDoneCode").textContent = a.code
+			}
+			const cyc = setInterval(() => {
+				if (busy) return
+				mi = (mi + 1) % ASSETS.length
+				const card = $("mock")
+				card.style.transition = "opacity .28s"
+				card.style.opacity = ".0"
+				setTimeout(() => {
+					paint(ASSETS[mi])
+					card.style.opacity = "1"
+				}, 280)
+			}, 3200)
+			$("mBtn").addEventListener("click", () => {
+				if (busy) return
+				busy = true
+				const t = $("mBtnText")
+				t.textContent = "Confirm in your wallet…"
+				setTimeout(() => {
+					$("mBtn").style.display = "none"
+					$("mDone").style.display = "flex"
+					setTimeout(() => {
+						$("mBtn").style.display = "flex"
+						$("mDone").style.display = "none"
+						paint(ASSETS[mi])
+						busy = false
+					}, 2600)
+				}, 1100)
+			})
+
+			// Scroll reveal with light stagger.
+			const io = new IntersectionObserver(
+				(es) => {
+					es.forEach((e) => {
+						if (e.isIntersecting) {
+							e.target.classList.add("in")
+							io.unobserve(e.target)
+						}
+					})
+				},
+				{ threshold: 0.12, rootMargin: "0px 0px -7% 0px" },
+			)
+			document.querySelectorAll(".reveal").forEach((el) => {
+				const sibs = [...el.parentElement.querySelectorAll(":scope > .reveal")]
+				el.style.transitionDelay = sibs.indexOf(el) * 75 + "ms"
+				io.observe(el)
+			})
+			document
+				.querySelectorAll(".hero .reveal")
+				.forEach((el) => el.classList.add("in"))
+		</script>
 	</body>
 </html>
