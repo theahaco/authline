@@ -14,7 +14,8 @@
     "format": "prettier . --write",
     "prepare": "husky",
     "test": "vitest run",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs"
   },
   "workspaces": [
     "packages/*"
