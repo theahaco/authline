@@ -1,0 +1,123 @@
+/* Authline dApp — animations & interaction states (warm "paper" theme). */
+:root {
+	--al-green: #16734a;
+	--al-green-bright: #1c9460;
+	--al-line: #e4dac8;
+}
+* {
+	box-sizing: border-box;
+}
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+body {
+	background: #f3ede1;
+	-webkit-font-smoothing: antialiased;
+	font-family: "Bricolage Grotesque", system-ui, sans-serif;
+}
+
+@keyframes alspin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@keyframes alpop {
+	0% {
+		transform: scale(0.6);
+		opacity: 0;
+	}
+	60% {
+		transform: scale(1.08);
+	}
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+@keyframes aldraw {
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+@keyframes alfade {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes albar {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+@keyframes alglow {
+	0%,
+	100% {
+		opacity: 0.7;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+.al-spin {
+	animation: alspin 0.85s linear infinite;
+}
+.al-cta {
+	transition:
+		filter 0.15s,
+		transform 0.05s,
+		opacity 0.15s;
+}
+.al-cta:hover:not(:disabled) {
+	filter: brightness(1.07);
+}
+.al-cta:active:not(:disabled) {
+	transform: translateY(1px);
+}
+.al-fade {
+	animation: alfade 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.al-wrow {
+	transition:
+		border-color 0.15s,
+		background 0.15s,
+		transform 0.05s;
+}
+.al-wrow:hover:not(:disabled) {
+	border-color: #c2dec6 !important;
+	background: rgba(22, 115, 74, 0.05) !important;
+}
+.al-wrow:active:not(:disabled) {
+	transform: translateY(1px);
+}
+.al-link {
+	cursor: pointer;
+	transition: color 0.15s;
+}
+.al-link:hover {
+	color: var(--al-green-bright) !important;
+}
+.al-check-c {
+	stroke-dasharray: 48;
+	stroke-dashoffset: 48;
+	animation: aldraw 0.5s 0.15s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.al-fade,
+	.al-check-c,
+	.al-spin {
+		animation: none !important;
+	}
+}

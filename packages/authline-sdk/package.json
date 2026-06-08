@@ -1,0 +1,43 @@
+{
+  "name": "@theaha/authline",
+  "version": "0.2.0",
+  "description": "Integrator SDK for one-signature activation of AUTH_REQUIRED Stellar assets (Trustline Onboarder / SEP draft v0.2).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@stellar/stellar-sdk": ">=14 <15",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@stellar/stellar-sdk": "^14.4.3",
+    "@types/react": "^19.2.0",
+    "typescript": "^5.6.0"
+  },
+  "repository": "https://github.com/theahaco/stellar-assets"
+}
