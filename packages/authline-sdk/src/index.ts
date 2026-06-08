@@ -50,7 +50,12 @@ export {
 	type StellarNet,
 	type ReconcilableConfig,
 } from "./registry.js"
-export { buildOnboardTx, type BuildOnboardOptions } from "./onboard.js"
+export {
+	buildOnboardTx,
+	buildTrustTx,
+	type BuildOnboardOptions,
+	type BuildTrustOptions,
+} from "./onboard.js"
 export {
 	getActivationStatus,
 	getActivationStatus as status,

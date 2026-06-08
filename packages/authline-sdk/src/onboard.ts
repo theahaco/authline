@@ -93,3 +93,59 @@ export async function buildOnboardTx(
 	const prepared = await server.prepareTransaction(tx)
 	return prepared.toXDR()
 }
+
+export interface BuildTrustOptions {
+	/** Soroban RPC URL. */
+	rpcUrl: string
+	/** Network passphrase (mainnet / testnet). */
+	networkPassphrase: string
+	/** The holder's account (G...), who signs the single resulting transaction. */
+	holder: string
+	/** Resolved config; only `sac` is used. `authorizer`/`onboard` are ignored. */
+	config: OnboarderConfig
+	allowHttp?: boolean
+}
+
+/**
+ * Build the **one-signature** CAP-73 trust transaction for an OPEN asset.
+ * Invokes `SAC.trust(holder)` directly (no authorizer, no onboard wrapper):
+ * for a non-`AUTH_REQUIRED` asset the trustline is created already authorized
+ * under the holder's single signature. The returned base64 XDR is unsigned —
+ * hand it to the wallet to sign, then submit via Soroban RPC.
+ *
+ * Like CAP-73 `trust()`, this has no sponsorship: the holder must control a
+ * funded account that can cover the 0.5 XLM trustline reserve. For a regulated
+ * (`AUTH_REQUIRED`) asset use {@link buildOnboardTx} instead.
+ *
+ * SECURITY: `config.sac` is the contract the holder's trustline is created
+ * against. If `config` originated from `discoverOnboarder` (an untrusted
+ * stellar.toml), reconcile it against the pinned registry first
+ * (`reconcileWithRegistry`, or pass `network` to `discoverOnboarder`) so a
+ * spoofed toml cannot redirect the trustline to an attacker-controlled SAC.
+ */
+export async function buildTrustTx(opts: BuildTrustOptions): Promise<string> {
+	if (!opts.config.sac) {
+		throw new Error(
+			"config.sac is required for the CAP-73 trust path (open asset)",
+		)
+	}
+	const server = new rpc.Server(opts.rpcUrl, {
+		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
+	})
+	const source = await server.getAccount(opts.holder)
+
+	const sac = new Contract(opts.config.sac)
+	const op = sac.call("trust", new Address(opts.holder).toScVal())
+
+	const tx = new TransactionBuilder(source, {
+		fee: BASE_FEE,
+		networkPassphrase: opts.networkPassphrase,
+	})
+		.addOperation(op)
+		.setTimeout(180)
+		.build()
+
+	// Simulate + assemble footprint/resource fees so the tx is submit-ready.
+	const prepared = await server.prepareTransaction(tx)
+	return prepared.toXDR()
+}
