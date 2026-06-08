@@ -47,3 +47,8 @@ src/contracts/*
 !src/contracts/util.ts
 !src/contracts/assets.ts
 tsconfig.app.tsbuildinfo
+
+# e2e
+/test-results
+/playwright-report
+/tests/e2e/.auth

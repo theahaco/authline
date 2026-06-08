@@ -15,7 +15,8 @@
     "prepare": "husky",
     "test": "vitest run",
     "typecheck": "tsc",
-    "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs"
+    "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs",
+    "test:e2e:testnet": "RUN_TESTNET_E2E=1 vitest run tests/e2e/testnet-usdc.e2e.test.ts"
   },
   "workspaces": [
     "packages/*"

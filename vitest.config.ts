@@ -13,7 +13,11 @@ export default defineConfig({
 	},
 	test: {
 		environment: "node",
-		include: ["src/**/*.test.ts", "packages/**/src/**/*.test.ts"],
-		exclude: ["tests/e2e/**", "node_modules/**", "dist/**"],
+		include: [
+			"src/**/*.test.ts",
+			"packages/**/src/**/*.test.ts",
+			"tests/e2e/**/*.e2e.test.ts",
+		],
+		exclude: ["node_modules/**", "dist/**"],
 	},
 })
