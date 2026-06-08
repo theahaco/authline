@@ -11,6 +11,7 @@ import {
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import {
 	buildOnboardTx,
+	buildTrustTx,
 	getActivationStatus,
 	isValidIssuer,
 } from "@theaha/authline"
@@ -57,6 +58,31 @@ const kit = new StellarWalletsKit({
 	selectedWalletId: FREIGHTER_ID,
 	modules: allowAllModules(),
 })
+
+/**
+ * Optional test seam: an injected signer used by the e2e browser tests so the
+ * real dApp can run without a wallet extension. Inert in production (the
+ * `window` hook is never set there).
+ */
+interface E2ESigner {
+	address: string
+	signTransaction(xdr: string): Promise<{ signedTxXdr: string }>
+}
+const e2eSigner = (): E2ESigner | undefined =>
+	typeof window !== "undefined"
+		? (window as unknown as { __AUTHLINE_E2E__?: E2ESigner }).__AUTHLINE_E2E__
+		: undefined
+
+/** Sign via the injected e2e signer when present, otherwise the wallet kit. */
+async function signTx(xdr: string, address: string): Promise<string> {
+	const e2e = e2eSigner()
+	if (e2e) return (await e2e.signTransaction(xdr)).signedTxXdr
+	const { signedTxXdr } = await kit.signTransaction(xdr, {
+		networkPassphrase: NETWORK.passphrase,
+		address,
+	})
+	return signedTxXdr
+}
 
 type Phase =
 	| "directory"
@@ -780,8 +806,14 @@ export function AuthlineApp() {
 
 	const connect = useCallback(async (id: string) => {
 		try {
-			kit.setWallet(id)
-			const { address: addr } = await kit.getAddress()
+			const e2e = e2eSigner()
+			let addr: string
+			if (e2e) {
+				addr = e2e.address
+			} else {
+				kit.setWallet(id)
+				addr = (await kit.getAddress()).address
+			}
 			setShowModal(false)
 			setAddress(addr)
 			const st = await getActivationStatus({
@@ -817,18 +849,24 @@ export function AuthlineApp() {
 		setErrMsg("")
 		setPhase("building")
 		try {
-			const xdr = await buildOnboardTx({
-				rpcUrl: NETWORK.rpcUrl,
-				networkPassphrase: NETWORK.passphrase,
-				holder: address,
-				config: ASSET,
-				allowHttp: NETWORK.allowHttp,
-			})
+			const xdr =
+				ASSET.capability === "open" || !ASSET.authorizer
+					? await buildTrustTx({
+							rpcUrl: NETWORK.rpcUrl,
+							networkPassphrase: NETWORK.passphrase,
+							holder: address,
+							config: ASSET,
+							allowHttp: NETWORK.allowHttp,
+						})
+					: await buildOnboardTx({
+							rpcUrl: NETWORK.rpcUrl,
+							networkPassphrase: NETWORK.passphrase,
+							holder: address,
+							config: ASSET,
+							allowHttp: NETWORK.allowHttp,
+						})
 			setPhase("signing")
-			const { signedTxXdr } = await kit.signTransaction(xdr, {
-				networkPassphrase: NETWORK.passphrase,
-				address,
-			})
+			const signedTxXdr = await signTx(xdr, address)
 			setPhase("submitting")
 			const server = new rpc.Server(NETWORK.rpcUrl, {
 				allowHttp: NETWORK.allowHttp,
@@ -897,7 +935,9 @@ export function AuthlineApp() {
 					Connect a wallet to create <b style={{ color: AL.ink }}>and</b>{" "}
 					authorize your {ASSET.assetCode} trustline in a single signature.
 				</p>
-				<Primary onClick={() => setShowModal(true)}>
+				<Primary
+					onClick={() => (e2eSigner() ? connect("e2e") : setShowModal(true))}
+				>
 					<svg
 						width="15"
 						height="15"
