@@ -28,6 +28,7 @@ lerna-debug.log*
 .env
 .env.*
 !.env.example
+!.env.e2e
 
 # easy way to create temporary local-only files and folders
 *.local.*
