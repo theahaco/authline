@@ -1,7 +1,11 @@
 # USDC support, open-asset (CAP-73 `trust`) onboarding, and e2e testing
 
 - **Date:** 2026-06-08
-- **Status:** Design — in review (PR)
+- **Status:** SUPERSEDED by
+  `2026-06-09-onboard-router-runtime-discovery-design.md` — the two-path (open
+  vs permissioned) client branching is replaced by a single router contract
+  method with on-chain capability discovery. The e2e harness, testnet USDC
+  registry entry, and env plumbing from this design survive.
 - **Author:** Willem Wyndham (with Claude)
 - **Branch:** `feat/usdc-open-asset-e2e`, based on `main` (the Authline SDK it
   builds on landed in `main` via #13 / #14)
