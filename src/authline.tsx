@@ -84,6 +84,14 @@ async function signTx(xdr: string, address: string): Promise<string> {
 	return signedTxXdr
 }
 
+// Capability-aware copy: an OPEN asset (no authorizer) only needs its trustline
+// CREATED — there is no separate authorize step — so the UI must not promise one.
+const IS_OPEN = ASSET.capability === "open" || !ASSET.authorizer
+const STATUS_PILL = IS_OPEN ? "Open" : "Auth req."
+const ERROR_HEADING = IS_OPEN
+	? "Couldn’t create trustline"
+	: "Couldn’t authorize"
+
 type Phase =
 	| "directory"
 	| "idle"
@@ -849,22 +857,21 @@ export function AuthlineApp() {
 		setErrMsg("")
 		setPhase("building")
 		try {
-			const xdr =
-				ASSET.capability === "open" || !ASSET.authorizer
-					? await buildTrustTx({
-							rpcUrl: NETWORK.rpcUrl,
-							networkPassphrase: NETWORK.passphrase,
-							holder: address,
-							config: ASSET,
-							allowHttp: NETWORK.allowHttp,
-						})
-					: await buildOnboardTx({
-							rpcUrl: NETWORK.rpcUrl,
-							networkPassphrase: NETWORK.passphrase,
-							holder: address,
-							config: ASSET,
-							allowHttp: NETWORK.allowHttp,
-						})
+			const xdr = IS_OPEN
+				? await buildTrustTx({
+						rpcUrl: NETWORK.rpcUrl,
+						networkPassphrase: NETWORK.passphrase,
+						holder: address,
+						config: ASSET,
+						allowHttp: NETWORK.allowHttp,
+					})
+				: await buildOnboardTx({
+						rpcUrl: NETWORK.rpcUrl,
+						networkPassphrase: NETWORK.passphrase,
+						holder: address,
+						config: ASSET,
+						allowHttp: NETWORK.allowHttp,
+					})
 			setPhase("signing")
 			const signedTxXdr = await signTx(xdr, address)
 			setPhase("submitting")
@@ -921,7 +928,7 @@ export function AuthlineApp() {
 				>
 					‹ All assets
 				</button>
-				<AssetRow status={<Pill accent>Auth req.</Pill>} />
+				<AssetRow status={<Pill accent>{STATUS_PILL}</Pill>} />
 				<Divider />
 				<p
 					style={{
@@ -932,8 +939,17 @@ export function AuthlineApp() {
 						margin: "2px 0 18px",
 					}}
 				>
-					Connect a wallet to create <b style={{ color: AL.ink }}>and</b>{" "}
-					authorize your {ASSET.assetCode} trustline in a single signature.
+					{IS_OPEN ? (
+						<>
+							Connect a wallet to create your {ASSET.assetCode} trustline in a
+							single signature.
+						</>
+					) : (
+						<>
+							Connect a wallet to create <b style={{ color: AL.ink }}>and</b>{" "}
+							authorize your {ASSET.assetCode} trustline in a single signature.
+						</>
+					)}
 				</p>
 				<Primary
 					onClick={() => (e2eSigner() ? connect("e2e") : setShowModal(true))}
@@ -1039,7 +1055,7 @@ export function AuthlineApp() {
 	} else if (phase === "ready") {
 		body = (
 			<div className="al-fade">
-				<AssetRow status={<Pill accent>Auth req.</Pill>} />
+				<AssetRow status={<Pill accent>{STATUS_PILL}</Pill>} />
 				<div
 					style={{
 						display: "flex",
@@ -1068,10 +1084,25 @@ export function AuthlineApp() {
 						margin: "15px 0 16px",
 					}}
 				>
-					One signature runs{" "}
-					<span style={{ fontFamily: AL.mono, color: AL.ink }}>trust()</span>{" "}
-					(CAP-73) then authorizes the line — no separate “create a trustline”
-					step.
+					{IS_OPEN ? (
+						<>
+							One signature runs{" "}
+							<span style={{ fontFamily: AL.mono, color: AL.ink }}>
+								trust()
+							</span>{" "}
+							(CAP-73) — your {ASSET.assetCode} trustline is created and usable
+							immediately, with no separate authorize step.
+						</>
+					) : (
+						<>
+							One signature runs{" "}
+							<span style={{ fontFamily: AL.mono, color: AL.ink }}>
+								trust()
+							</span>{" "}
+							(CAP-73) then authorizes the line — no separate “create a
+							trustline” step.
+						</>
+					)}
 				</p>
 				<Primary onClick={activate}>
 					<svg
@@ -1332,7 +1363,7 @@ export function AuthlineApp() {
 								color: AL.ink,
 							}}
 						>
-							Couldn’t authorize
+							{ERROR_HEADING}
 						</div>
 						<div
 							style={{
