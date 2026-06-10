@@ -8,9 +8,10 @@ import {
 	LOBSTR_ID,
 	HANA_ID,
 } from "@creit.tech/stellar-wallets-kit"
-import { rpc, scValToNative, TransactionBuilder } from "@stellar/stellar-sdk"
+import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import {
 	buildOnboardTx,
+	decodeOnboardStatus,
 	getActivationStatus,
 	isValidIssuer,
 } from "@theaha/authline"
@@ -902,14 +903,12 @@ export function AuthlineApp() {
 			if (got.status !== rpc.Api.GetTransactionStatus.SUCCESS)
 				throw new Error(`Transaction ${got.status.toLowerCase()}`)
 			// The router reports the truthful outcome: Authorized, or
-			// TrustlineOnly (trustline kept, no one-step authorizer).
-			try {
-				const rv = got.returnValue ? scValToNative(got.returnValue) : null
-				const tag = Array.isArray(rv) ? rv[0] : rv
-				setTrustlineOnly(tag === "TrustlineOnly")
-			} catch {
-				setTrustlineOnly(false) // best-effort; SUCCESS strongly implies Authorized for one-step assets
-			}
+			// TrustlineOnly (trustline kept, no one-step authorizer). On an
+			// unknown/undecodable return value, fall back to the asset's static
+			// capability so we never render the stronger "authorized" claim for an
+			// asset that may only be trustline-only.
+			const status = decodeOnboardStatus(got.returnValue)
+			setTrustlineOnly(status ? status === "TrustlineOnly" : !IS_OPEN)
 			setHash(sent.hash)
 			setPhase("success")
 		} catch (e) {

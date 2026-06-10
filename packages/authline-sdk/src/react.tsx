@@ -1,6 +1,7 @@
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import { useCallback, useState } from "react"
 import { buildOnboardTx, defaultAllowHttp } from "./onboard.js"
+import { decodeOnboardStatus } from "./onboard-status.js"
 import { type OnboarderConfig } from "./index.js"
 
 export type ActivationState =
@@ -31,10 +32,14 @@ export function useActivation(args: UseActivationArgs) {
 	const [state, setState] = useState<ActivationState>("idle")
 	const [error, setError] = useState<string | null>(null)
 	const [hash, setHash] = useState<string | null>(null)
+	// The router can succeed (tx SUCCESS) while returning TrustlineOnly — the
+	// trustline was created but no one-step authorizer authorized it.
+	const [trustlineOnly, setTrustlineOnly] = useState(false)
 
 	const activate = useCallback(
 		async (holder: string) => {
 			setError(null)
+			setTrustlineOnly(false)
 			try {
 				setState("building")
 				const xdr = await buildOnboardTx({
@@ -79,8 +84,15 @@ export function useActivation(args: UseActivationArgs) {
 					throw new Error(
 						"activation timed out: transaction not confirmed within 180s",
 					)
-				if (got.status !== "SUCCESS")
+				// Compare against the enum so TypeScript narrows `got` to the
+				// successful response shape and exposes `returnValue`.
+				if (got.status !== rpc.Api.GetTransactionStatus.SUCCESS)
 					throw new Error(`activation failed: ${got.status}`)
+				// Surface TrustlineOnly so the embedding UI does not claim full
+				// activation for a line that still cannot receive the asset.
+				setTrustlineOnly(
+					decodeOnboardStatus(got.returnValue) === "TrustlineOnly",
+				)
 				setState("success")
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e))
@@ -90,7 +102,7 @@ export function useActivation(args: UseActivationArgs) {
 		[args],
 	)
 
-	return { state, error, hash, activate }
+	return { state, error, hash, trustlineOnly, activate }
 }
 
 export interface ActivateButtonProps extends UseActivationArgs {
@@ -104,7 +116,7 @@ export function ActivateButton({
 	label,
 	...rest
 }: ActivateButtonProps) {
-	const { state, error, activate } = useActivation(rest)
+	const { state, error, trustlineOnly, activate } = useActivation(rest)
 	const busy =
 		state === "building" || state === "signing" || state === "submitting"
 	return (
@@ -114,7 +126,9 @@ export function ActivateButton({
 				onClick={() => void activate(holder)}
 			>
 				{state === "success"
-					? "Activated ✓"
+					? trustlineOnly
+						? "Trustline created"
+						: "Activated ✓"
 					: busy
 						? "Activating…"
 						: (label ?? `Activate ${rest.config.assetCode} (1 signature)`)}

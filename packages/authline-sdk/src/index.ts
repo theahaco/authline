@@ -71,6 +71,7 @@ export {
 	getActivationStatus as status,
 	type ActivationStatus,
 } from "./status.js"
+export { decodeOnboardStatus, type OnboardStatusTag } from "./onboard-status.js"
 // Third-party (exchange / broker / wallet) integration surface.
 export {
 	buildAuthorizeTx,
