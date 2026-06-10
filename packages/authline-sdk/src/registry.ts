@@ -85,6 +85,41 @@ export const OFFICIAL_ASSETS: OfficialAsset[] = [
 		authClawback: true,
 		verifiedAt: "2026-06-04",
 	},
+	{
+		// Testnet entry: issuer + flags verified via Horizon (2026-06-08); the SAC
+		// is the deterministic `Asset.contractId(TESTNET)` id (same derivation that
+		// reproduces every pinned mainnet SAC), deployed on testnet. Testnet has no
+		// scam-issuer risk, so a derived+deployed SAC is acceptable here.
+		code: "USDC",
+		issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+		sac: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+		capability: "open",
+		name: "USD Coin",
+		network: "TESTNET",
+		homeDomain: "centre.io",
+		authRevocable: true,
+		authClawback: false,
+		verifiedAt: "2026-06-08",
+	},
+	{
+		// Testnet EURCV-style regulated test asset: AUTH_REQUIRED, with the
+		// asset-agnostic Trustline Authorizer set as its SAC admin — so the router
+		// discovers `authorize_trustline` on-chain and authorizes in one step, the
+		// same path mainnet EURCV uses. Issuer auth flags read via Horizon
+		// (2026-06-10); the on-chain discovery + authorize is proven by
+		// tests/e2e/testnet-tlo.e2e.test.ts. Activate it in the dApp with
+		// PUBLIC_ASSET_CODE=TLO.
+		code: "TLO",
+		issuer: "GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U",
+		sac: "CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3",
+		authorizer: "CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
+		capability: "permissionedOneStep",
+		name: "Trustline Onboard Test (EURCV-style)",
+		network: "TESTNET",
+		authRevocable: true,
+		authClawback: false,
+		verifiedAt: "2026-06-10",
+	},
 ]
 
 /**
@@ -113,6 +148,26 @@ export function validateOfficialAsset(a: OfficialAsset): void {
 
 // Fail fast at module load if any pinned entry is malformed.
 OFFICIAL_ASSETS.forEach(validateOfficialAsset)
+
+/**
+ * Pinned Authline onboard-router ids per network — the deploy-once, stateless
+ * singleton exposing `onboard(sac, holder)`. PINNED like the assets above
+ * (never resolved from an advertised source). TESTNET is filled by the
+ * deployment task; PUBLIC is added when the mainnet router ships. Future:
+ * resolve via the on-chain stellar-registry instead.
+ */
+export const ROUTERS: Partial<Record<StellarNet, string>> = {
+	// Deployed from contracts/trustline-onboard @ 9925c31 (wasm hash
+	// ef08ae22467dd80bdb8c0017beb6c90964baacb8c6ab1fb673fb2bc765f206e9),
+	// verified on-chain 2026-06-10.
+	TESTNET: "CABVVUYHXS6UVN2VYYXKEUO2XEJIAGMTEYF2BOWGUUJVOO2IGPRWZAX4",
+}
+
+// Fail fast at module load if a pinned router id is malformed.
+Object.values(ROUTERS).forEach((id) => {
+	if (!StrKey.isValidContract(id))
+		throw new Error(`registry: pinned router is not a valid C-address: ${id}`)
+})
 
 /** StrKey validators re-exposed so consumers can validate addresses without importing the base SDK. */
 export const isValidIssuer = (s: string): boolean =>
@@ -153,6 +208,8 @@ export interface ReconcilableConfig {
 	assetIssuer: string
 	sac: string
 	authorizer?: string
+	/** Onboard router advertised by the issuer — must match the pinned ROUTERS id for the network when both exist. */
+	router?: string
 }
 
 /**
@@ -162,7 +219,9 @@ export interface ReconcilableConfig {
  * pinned value, or this throws — refusing to let a spoofed `stellar.toml`
  * redirect a trustline/authorize to attacker-controlled ids. When the code is
  * NOT curated there is nothing to pin against, so the config is returned
- * unchanged (callers should treat uncurated assets with extra caution).
+ * unchanged (callers should treat uncurated assets with extra caution) — EXCEPT
+ * the router: it is asset-independent (one pinned singleton per network), so an
+ * advertised router is checked against `ROUTERS` regardless of curation.
  *
  * Returns the same config on success so it can be used inline.
  */
@@ -170,8 +229,6 @@ export function reconcileWithRegistry<T extends ReconcilableConfig>(
 	config: T,
 	net: StellarNet,
 ): T {
-	const pinned = resolveOfficialAsset(config.assetCode, net)
-	if (!pinned) return config
 	const assertEq = (
 		field: string,
 		got: string | undefined,
@@ -183,6 +240,11 @@ export function reconcileWithRegistry<T extends ReconcilableConfig>(
 					`the pinned value ${want} — refusing a possibly-spoofed onboarder config`,
 			)
 	}
+	// Asset-independent: a spoofed advertised router is rejected even for
+	// asset codes the registry does not curate.
+	assertEq("router", config.router, ROUTERS[net])
+	const pinned = resolveOfficialAsset(config.assetCode, net)
+	if (!pinned) return config
 	assertEq("issuer", config.assetIssuer, pinned.issuer)
 	assertEq("SAC", config.sac, pinned.sac)
 	assertEq("authorizer", config.authorizer, pinned.authorizer)

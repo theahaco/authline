@@ -3,6 +3,8 @@ import {
 	netFromPassphrase,
 	isValidIssuer,
 	isValidContractId,
+	defaultAllowHttp,
+	ROUTERS,
 	type AssetCapability,
 	type OnboarderConfig,
 } from "@theaha/authline"
@@ -12,17 +14,19 @@ import {
  * the Pages workflow). Add/replace the live asset by config alone.
  */
 
+const RPC_URL =
+	import.meta.env.PUBLIC_STELLAR_RPC_URL ??
+	"https://soroban-testnet.stellar.org"
+
 export const NETWORK = {
-	rpcUrl:
-		import.meta.env.PUBLIC_STELLAR_RPC_URL ??
-		"https://soroban-testnet.stellar.org",
-	horizonUrl:
-		import.meta.env.PUBLIC_STELLAR_HORIZON_URL ??
-		"https://horizon-testnet.stellar.org",
+	rpcUrl: RPC_URL,
 	passphrase:
 		import.meta.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE ??
 		"Test SDF Network ; September 2015",
-	allowHttp: false,
+	// Permit cleartext http only for a local quickstart (localhost/127.0.0.1);
+	// any remote endpoint stays https-only. Mirrors the SDK's defaultAllowHttp so
+	// `stellar scaffold watch` against a local node works without a footgun flag.
+	allowHttp: defaultAllowHttp(RPC_URL),
 }
 
 export const NETWORK_LABEL = NETWORK.passphrase.includes("Public")
@@ -51,20 +55,22 @@ function warnIfInvalid(
 warnIfInvalid("ASSET_ISSUER", import.meta.env.PUBLIC_ASSET_ISSUER, "G")
 warnIfInvalid("SAC", import.meta.env.PUBLIC_SAC, "C")
 warnIfInvalid("AUTHORIZER", import.meta.env.PUBLIC_AUTHORIZER, "C")
-warnIfInvalid("ONBOARD", import.meta.env.PUBLIC_ONBOARD, "C")
+warnIfInvalid("ROUTER", import.meta.env.PUBLIC_ROUTER, "C")
 warnIfInvalid("STELLAR_RPC_URL", import.meta.env.PUBLIC_STELLAR_RPC_URL, "url")
-warnIfInvalid(
-	"STELLAR_HORIZON_URL",
-	import.meta.env.PUBLIC_STELLAR_HORIZON_URL,
-	"url",
-)
 
-const CODE = import.meta.env.PUBLIC_ASSET_CODE ?? "EURCV"
 // Resolve the pinned registry entry by (code, network) — never by code alone, so
 // a known code on testnet does not pick up a mainnet asset's name/clawback flags.
 // Env always wins for display; on-chain ids prefer env and fall back to the
 // registry-verified pinned ids so a known asset is fully wired.
-const pinned = resolveOfficialAsset(CODE, netFromPassphrase(NETWORK.passphrase))
+const NET_TAG = netFromPassphrase(NETWORK.passphrase)
+// Network-aware default asset: mainnet showcases EURCV (the production target);
+// every other network defaults to the pinned testnet test token (USDC), which
+// has a real testnet issuer/SAC. So a dev pointing at testnet/local without
+// setting PUBLIC_ASSET_CODE gets a working asset instead of mainnet EURCV (which
+// has no testnet issuer/SAC and cannot be activated). Override with PUBLIC_ASSET_CODE.
+const CODE =
+	import.meta.env.PUBLIC_ASSET_CODE ?? (NET_TAG === "PUBLIC" ? "EURCV" : "USDC")
+const pinned = resolveOfficialAsset(CODE, NET_TAG)
 
 /** The live, wired asset (the one the dApp actually activates on-chain). */
 export interface AssetConfig extends OnboarderConfig {
@@ -86,7 +92,7 @@ export const ASSET: AssetConfig = {
 		"GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G",
 	sac: import.meta.env.PUBLIC_SAC ?? pinned?.sac ?? "",
 	authorizer: import.meta.env.PUBLIC_AUTHORIZER ?? pinned?.authorizer ?? "",
-	onboard: import.meta.env.PUBLIC_ONBOARD,
+	router: import.meta.env.PUBLIC_ROUTER ?? ROUTERS[NET_TAG] ?? "",
 	backends: ["cap73-one-signature", "cap33-sponsored"],
 	name: import.meta.env.PUBLIC_ASSET_NAME ?? pinned?.name ?? "Stellar asset",
 	glyph: CODE.slice(0, 2).toUpperCase(),
@@ -104,18 +110,14 @@ export const ASSET: AssetConfig = {
 		(pinned?.authClawback ?? false),
 }
 
-// A regulated (permissionedOneStep) asset needs both its SAC and authorizer to
-// build the one-signature onboard tx. Surface a misconfiguration loudly here —
-// missing PUBLIC_* wiring or an absent registry entry — instead of failing
-// opaquely deep inside transaction building.
-if (
-	ASSET.capability === "permissionedOneStep" &&
-	(!ASSET.sac || !ASSET.authorizer)
-)
+// Every activation flows through the router (which discovers the asset's
+// capability on-chain) — a missing router id means activation cannot build
+// transactions at all. Surface that loudly here instead of failing deep
+// inside transaction building.
+if (!ASSET.router)
 	console.error(
-		`[config] ${ASSET.assetCode} is permissionedOneStep but is missing ` +
-			`${!ASSET.sac ? "SAC " : ""}${!ASSET.authorizer ? "authorizer" : ""}`.trim() +
-			" — set PUBLIC_SAC / PUBLIC_AUTHORIZER, or add it to the pinned registry.",
+		`[config] no onboard router configured for network ${NET_TAG} — ` +
+			"set PUBLIC_ROUTER or pin it in the SDK's ROUTERS.",
 	)
 
 /** Directory: the configured asset is Live; the rest are the roadmap. */

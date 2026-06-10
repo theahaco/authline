@@ -11,6 +11,7 @@ import {
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import {
 	buildOnboardTx,
+	decodeOnboardStatus,
 	getActivationStatus,
 	isValidIssuer,
 } from "@theaha/authline"
@@ -57,6 +58,44 @@ const kit = new StellarWalletsKit({
 	selectedWalletId: FREIGHTER_ID,
 	modules: allowAllModules(),
 })
+
+/**
+ * Optional test seam: an injected signer used by the e2e browser tests so the
+ * real dApp can run without a wallet extension. Inert in production (the
+ * `window` hook is never set there).
+ */
+interface E2ESigner {
+	address: string
+	signTransaction(xdr: string): Promise<{ signedTxXdr: string }>
+}
+const e2eSigner = (): E2ESigner | undefined =>
+	typeof window !== "undefined"
+		? (window as unknown as { __AUTHLINE_E2E__?: E2ESigner }).__AUTHLINE_E2E__
+		: undefined
+
+/** Sign via the injected e2e signer when present, otherwise the wallet kit. */
+async function signTx(xdr: string, address: string): Promise<string> {
+	const e2e = e2eSigner()
+	if (e2e) return (await e2e.signTransaction(xdr)).signedTxXdr
+	const { signedTxXdr } = await kit.signTransaction(xdr, {
+		networkPassphrase: NETWORK.passphrase,
+		address,
+	})
+	return signedTxXdr
+}
+
+// Capability-aware copy: an OPEN asset only needs its trustline CREATED. The
+// transaction shape is identical either way (the router discovers capability
+// on-chain); this drives COPY only.
+// Assumes the live tile is never permissionedManual (no such registry entry exists); revisit the copy if one is added.
+const IS_OPEN = ASSET.capability === "open"
+// No router id for this network (no pinned ROUTERS entry, no PUBLIC_ROUTER) —
+// activation cannot build a transaction, so the CTA must not promise one.
+const ROUTER_MISSING = !ASSET.router
+const STATUS_PILL = IS_OPEN ? "Open" : "Auth req."
+const ERROR_HEADING = IS_OPEN
+	? "Couldn’t create trustline"
+	: "Couldn’t authorize"
 
 type Phase =
 	| "directory"
@@ -736,6 +775,9 @@ export function AuthlineApp() {
 	const [showModal, setShowModal] = useState(false)
 	const [hash, setHash] = useState<string | null>(null)
 	const [errMsg, setErrMsg] = useState("")
+	// Truthful router outcome: trustline created but NOT authorized (the asset
+	// has no one-step authorizer) — drives the success copy.
+	const [trustlineOnly, setTrustlineOnly] = useState(false)
 	const [available, setAvailable] = useState<Set<string>>(new Set())
 	// wallet availability for the modal detection dots
 	useEffect(() => {
@@ -761,7 +803,8 @@ export function AuthlineApp() {
 		if (a && isValidIssuer(a)) {
 			setAddress(a)
 			getActivationStatus({
-				horizonUrl: NETWORK.horizonUrl,
+				rpcUrl: NETWORK.rpcUrl,
+				allowHttp: NETWORK.allowHttp,
 				account: a,
 				assetCode: ASSET.assetCode,
 				assetIssuer: ASSET.assetIssuer,
@@ -780,12 +823,19 @@ export function AuthlineApp() {
 
 	const connect = useCallback(async (id: string) => {
 		try {
-			kit.setWallet(id)
-			const { address: addr } = await kit.getAddress()
+			const e2e = e2eSigner()
+			let addr: string
+			if (e2e) {
+				addr = e2e.address
+			} else {
+				kit.setWallet(id)
+				addr = (await kit.getAddress()).address
+			}
 			setShowModal(false)
 			setAddress(addr)
 			const st = await getActivationStatus({
-				horizonUrl: NETWORK.horizonUrl,
+				rpcUrl: NETWORK.rpcUrl,
+				allowHttp: NETWORK.allowHttp,
 				account: addr,
 				assetCode: ASSET.assetCode,
 				assetIssuer: ASSET.assetIssuer,
@@ -805,16 +855,19 @@ export function AuthlineApp() {
 		setShowModal(false)
 		setAddress("")
 		setHash(null)
+		setTrustlineOnly(false)
 		setPhase("directory")
 	}
 	const reset = () => {
 		setHash(null)
 		setErrMsg("")
+		setTrustlineOnly(false)
 		setPhase(address ? "ready" : "directory")
 	}
 
 	const activate = useCallback(async () => {
 		setErrMsg("")
+		setTrustlineOnly(false)
 		setPhase("building")
 		try {
 			const xdr = await buildOnboardTx({
@@ -825,10 +878,7 @@ export function AuthlineApp() {
 				allowHttp: NETWORK.allowHttp,
 			})
 			setPhase("signing")
-			const { signedTxXdr } = await kit.signTransaction(xdr, {
-				networkPassphrase: NETWORK.passphrase,
-				address,
-			})
+			const signedTxXdr = await signTx(xdr, address)
 			setPhase("submitting")
 			const server = new rpc.Server(NETWORK.rpcUrl, {
 				allowHttp: NETWORK.allowHttp,
@@ -848,8 +898,17 @@ export function AuthlineApp() {
 			}
 			if (got.status === "NOT_FOUND")
 				throw new Error("Transaction not confirmed within 180s — try again")
-			if (got.status !== "SUCCESS")
+			// Compare against the enum (not the string literal) so TypeScript
+			// narrows `got` to GetSuccessfulTransactionResponse → `returnValue`.
+			if (got.status !== rpc.Api.GetTransactionStatus.SUCCESS)
 				throw new Error(`Transaction ${got.status.toLowerCase()}`)
+			// The router reports the truthful outcome: Authorized, or
+			// TrustlineOnly (trustline kept, no one-step authorizer). On an
+			// unknown/undecodable return value, fall back to the asset's static
+			// capability so we never render the stronger "authorized" claim for an
+			// asset that may only be trustline-only.
+			const status = decodeOnboardStatus(got.returnValue)
+			setTrustlineOnly(status ? status === "TrustlineOnly" : !IS_OPEN)
 			setHash(sent.hash)
 			setPhase("success")
 		} catch (e) {
@@ -883,7 +942,7 @@ export function AuthlineApp() {
 				>
 					‹ All assets
 				</button>
-				<AssetRow status={<Pill accent>Auth req.</Pill>} />
+				<AssetRow status={<Pill accent>{STATUS_PILL}</Pill>} />
 				<Divider />
 				<p
 					style={{
@@ -894,23 +953,51 @@ export function AuthlineApp() {
 						margin: "2px 0 18px",
 					}}
 				>
-					Connect a wallet to create <b style={{ color: AL.ink }}>and</b>{" "}
-					authorize your {ASSET.assetCode} trustline in a single signature.
+					{IS_OPEN ? (
+						<>
+							Connect a wallet to create your {ASSET.assetCode} trustline in a
+							single signature.
+						</>
+					) : (
+						<>
+							Connect a wallet to create <b style={{ color: AL.ink }}>and</b>{" "}
+							authorize your {ASSET.assetCode} trustline in a single signature.
+						</>
+					)}
 				</p>
-				<Primary onClick={() => setShowModal(true)}>
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 16 16"
-						fill="none"
-						stroke="#FFFFFF"
-						strokeWidth="1.7"
+				{ROUTER_MISSING && (
+					<p
+						style={{
+							fontFamily: AL.disp,
+							fontSize: 12.5,
+							lineHeight: 1.5,
+							color: AL.mut,
+							margin: "0 0 10px",
+						}}
 					>
-						<rect x="2.5" y="4.5" width="11" height="8" rx="2" />
-						<path d="M2.5 7h11" />
-					</svg>
-					Connect wallet
-				</Primary>
+						Activation is not yet configured for this network.
+					</p>
+				)}
+				{ROUTER_MISSING ? (
+					<Primary disabled>Activation unavailable</Primary>
+				) : (
+					<Primary
+						onClick={() => (e2eSigner() ? connect("e2e") : setShowModal(true))}
+					>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="#FFFFFF"
+							strokeWidth="1.7"
+						>
+							<rect x="2.5" y="4.5" width="11" height="8" rx="2" />
+							<path d="M2.5 7h11" />
+						</svg>
+						Connect wallet
+					</Primary>
+				)}
 				<div
 					style={{
 						display: "flex",
@@ -999,7 +1086,7 @@ export function AuthlineApp() {
 	} else if (phase === "ready") {
 		body = (
 			<div className="al-fade">
-				<AssetRow status={<Pill accent>Auth req.</Pill>} />
+				<AssetRow status={<Pill accent>{STATUS_PILL}</Pill>} />
 				<div
 					style={{
 						display: "flex",
@@ -1028,26 +1115,58 @@ export function AuthlineApp() {
 						margin: "15px 0 16px",
 					}}
 				>
-					One signature runs{" "}
-					<span style={{ fontFamily: AL.mono, color: AL.ink }}>trust()</span>{" "}
-					(CAP-73) then authorizes the line — no separate “create a trustline”
-					step.
+					{IS_OPEN ? (
+						<>
+							One signature runs{" "}
+							<span style={{ fontFamily: AL.mono, color: AL.ink }}>
+								trust()
+							</span>{" "}
+							(CAP-73) — your {ASSET.assetCode} trustline is created and usable
+							immediately, with no separate authorize step.
+						</>
+					) : (
+						<>
+							One signature runs{" "}
+							<span style={{ fontFamily: AL.mono, color: AL.ink }}>
+								trust()
+							</span>{" "}
+							(CAP-73) then authorizes the line — no separate “create a
+							trustline” step.
+						</>
+					)}
 				</p>
-				<Primary onClick={activate}>
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 16 16"
-						fill="none"
-						stroke="#FFFFFF"
-						strokeWidth="1.9"
-						strokeLinecap="round"
-						strokeLinejoin="round"
+				{ROUTER_MISSING && (
+					<p
+						style={{
+							fontFamily: AL.disp,
+							fontSize: 12.5,
+							lineHeight: 1.5,
+							color: AL.mut,
+							margin: "0 0 10px",
+						}}
 					>
-						<path d="M3.5 8.5l3 3 6-7" />
-					</svg>
-					Activate {ASSET.assetCode} · 1 signature
-				</Primary>
+						Activation is not yet configured for this network.
+					</p>
+				)}
+				{ROUTER_MISSING ? (
+					<Primary disabled>Activation unavailable</Primary>
+				) : (
+					<Primary onClick={activate}>
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="#FFFFFF"
+							strokeWidth="1.9"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M3.5 8.5l3 3 6-7" />
+						</svg>
+						Activate {ASSET.assetCode} · 1 signature
+					</Primary>
+				)}
 				<div
 					style={{
 						textAlign: "center",
@@ -1160,7 +1279,9 @@ export function AuthlineApp() {
 							letterSpacing: "-0.02em",
 						}}
 					>
-						{ASSET.assetCode} trustline authorized
+						{trustlineOnly
+							? `${ASSET.assetCode} trustline created`
+							: `${ASSET.assetCode} trustline authorized`}
 					</div>
 					<div
 						style={{
@@ -1170,7 +1291,13 @@ export function AuthlineApp() {
 							marginTop: 6,
 						}}
 					>
-						You’re ready to receive {ASSET.assetCode}.
+						{trustlineOnly ? (
+							<>
+								Trustline created — the issuer authorizes holders off-platform.
+							</>
+						) : (
+							<>You’re ready to receive {ASSET.assetCode}.</>
+						)}
 					</div>
 				</div>
 				<div
@@ -1186,7 +1313,7 @@ export function AuthlineApp() {
 				>
 					<KV
 						k="Status"
-						v="● Authorized"
+						v={trustlineOnly ? "● Trustline created" : "● Authorized"}
 						accent={AL.emeraldBright}
 						mono={false}
 					/>
@@ -1292,7 +1419,7 @@ export function AuthlineApp() {
 								color: AL.ink,
 							}}
 						>
-							Couldn’t authorize
+							{ERROR_HEADING}
 						</div>
 						<div
 							style={{

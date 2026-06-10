@@ -1,8 +1,12 @@
 # @theaha/authline
 
-Integrator SDK for **one-signature activation** of `AUTH_REQUIRED` Stellar
-classic assets. Wallets and exchanges embed the
-[Trustline Onboarder](../../README.md) flow with a few calls.
+Integrator SDK for **one-signature trustline onboarding** via an on-chain
+discovery router. The router discovers on-chain (via the SAC admin) whether the
+trustline also needs authorization, so the same single transaction shape works
+for every asset — open (USDC/EURC) or `AUTH_REQUIRED`. The `onboard` call
+returns an `OnboardStatus` (`Authorized` | `TrustlineOnly`); decode it with
+`decodeOnboardStatus` to know whether the line was also authorized, rather than
+treating tx success alone as full activation.
 
 ```bash
 npm install @theaha/authline
@@ -18,7 +22,7 @@ import { discoverOnboarder } from "@theaha/authline"
 // then reconciled against the pinned registry, so a spoofed stellar.toml whose
 // ids differ from the curated values is rejected (throws) instead of trusted.
 const config = await discoverOnboarder("theaha.co", { network: passphrase })
-// { assetCode: "EURCV", assetIssuer: "G...", sac: "C...", authorizer: "C...", onboard: "C...", backends: [...] }
+// { assetCode: "EURCV", assetIssuer: "G...", sac: "C...", router: "C...", authorizer: "C...", backends: [...] }
 ```
 
 > Without `network`, `discoverOnboarder` returns the issuer's **unverified**
@@ -28,15 +32,18 @@ const config = await discoverOnboarder("theaha.co", { network: passphrase })
 ## Build the one-signature transaction
 
 ```ts
-import { buildOnboardTx } from "@theaha/authline"
+import { buildOnboardTx, ROUTERS } from "@theaha/authline"
+import { Networks } from "@stellar/stellar-sdk"
 
+// Standalone testnet illustration (the discover() example above is mainnet EURCV).
+// The router id must be pinned per network; mainnet awaits the mainnet router deployment.
 const xdr = await buildOnboardTx({
-	rpcUrl: "https://mainnet.sorobanrpc.com",
-	networkPassphrase: "Public Global Stellar Network ; September 2015",
+	rpcUrl: "https://soroban-testnet.stellar.org",
+	networkPassphrase: Networks.TESTNET,
 	holder: userPublicKey,
-	config,
+	config: { ...config, router: ROUTERS.TESTNET },
 })
-// Hand `xdr` to the wallet to sign (one signature), then submit via Soroban RPC.
+// Hand `xdr` to the wallet to sign (one signature), then submit via Stellar RPC.
 ```
 
 ## React
@@ -57,19 +64,7 @@ import { ActivateButton } from "@theaha/authline/react"
 - `cap73-one-signature` — funded holder signs once; on-chain `onboard()` wrapper
   composes CAP-73 `trust()` + `authorize_trustline`. **(this SDK)**
 - `cap33-sponsored` — brand-new / under-funded account; classic
-  sponsored-reserve transaction (sponsor pays the reserve). Helper provided
-  separately; see [ARCHITECTURE.md](../../ARCHITECTURE.md) §3.
+  sponsored-reserve transaction. Build it with `buildSponsoredOnboardTx` from
+  this package (the sponsor pays the reserve). **(this SDK)**
 
 Use `selectBackend()` to choose per holder.
-
-## Status
-
-```ts
-import { getActivationStatus } from "@theaha/authline"
-const { hasTrustline, isAuthorized } = await getActivationStatus({
-	horizonUrl,
-	account,
-	assetCode: config.assetCode,
-	assetIssuer: config.assetIssuer,
-})
-```

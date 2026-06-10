@@ -18,14 +18,14 @@ depends on it; `npm run build` builds it first).
 
 | Need                             | Already in this repo                                                 |
 | -------------------------------- | -------------------------------------------------------------------- |
-| One-signature create + authorize | `contracts/trustline-onboard` → `onboard(sac, authorizer, holder)`   |
+| One-signature create + authorize | `contracts/trustline-onboard` → `onboard(sac, holder)`               |
 | The authorize seam               | the live **`eurcv_auth`** SAC admin → `authorize_trustline(account)` |
 
-Surface: `assetAuthRequired()` (open vs regulated detection),
-`buildSponsoredOnboardTx()` (CAP-33 sponsored, reserve-free `ChangeTrust` for a
-zero-XLM user), `buildOnboardTx()` (wraps this repo's `onboard()`),
-`buildAuthorizeTx()` (permissionless authorize-on-behalf), `onboardingRequest()`
-(SEP-7 + deep-link + hosted handoffs),
+Surface: `decodeOnboardStatus()` (decode the on-chain `OnboardStatus` return
+value), `buildSponsoredOnboardTx()` (CAP-33 sponsored, reserve-free
+`ChangeTrust` for a zero-XLM user), `buildOnboardTx()` (wraps this repo's
+`onboard()`), `buildAuthorizeTx()` (permissionless authorize-on-behalf),
+`onboardingRequest()` (SEP-7 + deep-link + hosted handoffs),
 `discoverOnboarder()`/`parseOnboarderToml()` (StrKey-validated `stellar.toml`
 discovery), a pinned `OFFICIAL_ASSETS` registry, and an optional headless
 `useActivation()` React hook. There is **no Authline authorizer** —

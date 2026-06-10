@@ -4,7 +4,6 @@ import {
 	Asset,
 	BASE_FEE,
 	Contract,
-	Horizon,
 	Operation,
 	TransactionBuilder,
 	rpc,
@@ -39,6 +38,12 @@ export async function buildAuthorizeTx(opts: {
 	config: OnboarderConfig
 	allowHttp?: boolean
 }): Promise<string> {
+	if (!opts.config.authorizer) {
+		throw new Error(
+			"config.authorizer is required for authorize-on-behalf (Case A) — " +
+				"it is the asset's SAC admin",
+		)
+	}
 	const server = new rpc.Server(opts.rpcUrl, {
 		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
 	})
@@ -75,7 +80,7 @@ export async function buildAuthorizeTx(opts: {
  * into trusting a counterfeit issuer for a well-known code.
  */
 export async function buildSponsoredOnboardTx(opts: {
-	horizonUrl: string
+	rpcUrl: string
 	networkPassphrase: string
 	/** The integrator account paying the reserve. */
 	sponsor: string
@@ -83,9 +88,13 @@ export async function buildSponsoredOnboardTx(opts: {
 	config: OnboarderConfig
 	/** Set when the user account does not exist yet (sponsored CreateAccount). */
 	createUserAccount?: boolean
+	/** Allow a cleartext-http RPC; defaults to localhost-only (`defaultAllowHttp`). */
+	allowHttp?: boolean
 }): Promise<string> {
-	const horizon = new Horizon.Server(opts.horizonUrl)
-	const src = await horizon.loadAccount(opts.sponsor)
+	const server = new rpc.Server(opts.rpcUrl, {
+		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
+	})
+	const src = await server.getAccount(opts.sponsor)
 	const asset = new Asset(opts.config.assetCode, opts.config.assetIssuer)
 	const b = new TransactionBuilder(src, {
 		fee: BASE_FEE,

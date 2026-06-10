@@ -28,6 +28,8 @@ lerna-debug.log*
 .env
 .env.*
 !.env.example
+!.env.e2e
+!.env.e2e-tlo
 
 # easy way to create temporary local-only files and folders
 *.local.*
@@ -47,3 +49,8 @@ src/contracts/*
 !src/contracts/util.ts
 !src/contracts/assets.ts
 tsconfig.app.tsbuildinfo
+
+# e2e
+/test-results
+/playwright-report
+/tests/e2e/.auth

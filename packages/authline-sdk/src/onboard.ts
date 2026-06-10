@@ -22,50 +22,50 @@ export function defaultAllowHttp(rpcUrl: string): boolean {
 }
 
 export interface BuildOnboardOptions {
-	/** Soroban RPC URL. */
+	/** Stellar RPC URL. */
 	rpcUrl: string
 	/** Network passphrase (mainnet / testnet). */
 	networkPassphrase: string
 	/** The holder's account (G...), who signs the single resulting transaction. */
 	holder: string
-	/** Resolved onboarder config (see `discoverOnboarder`). Must include `onboard`. */
+	/** Resolved onboarder config. Must include `sac` and `router`. */
 	config: OnboarderConfig
 	allowHttp?: boolean
 }
 
 /**
- * Build the **one-signature** CAP-73 onboarding transaction. The returned base64
- * XDR is unsigned: hand it to the wallet (e.g. Stellar Wallets Kit) for the
- * holder to sign, then submit via Soroban RPC.
+ * Build the **one-signature** onboarding transaction. The returned base64 XDR
+ * is unsigned: hand it to the wallet (e.g. Stellar Wallets Kit) for the holder
+ * to sign, then submit via Stellar RPC.
  *
- * On-chain this invokes `onboard(sac, authorizer, holder)`, which runs
- * `SAC.trust(holder)` (CAP-73, Protocol 26) and `authorizer.authorize_trustline(holder)`
- * under the holder's single authorization.
+ * On-chain this invokes the Authline router's `onboard(sac, holder)`, which
+ * runs CAP-73 `SAC.trust(holder)` and then DISCOVERS the asset's capability
+ * from `SAC.admin()` (CAP-68): an admin contract exposing
+ * `authorize_trustline` authorizes the line in the same transaction; an asset
+ * with no one-step authorizer keeps the trustline and reports `TrustlineOnly`.
+ * There is no open-vs-regulated branching on the client.
  *
- * Note: CAP-73 `trust()` has no sponsorship — the holder must control a funded,
- * on-ledger account that can cover the 0.5 XLM trustline reserve. For a brand-new
- * or under-funded account, use the CAP-33 sponsored path instead.
+ * Note: CAP-73 `trust()` has no sponsorship — the holder must control a
+ * funded, on-ledger account that can cover the 0.5 XLM trustline reserve. For
+ * a brand-new or under-funded account, use the CAP-33 sponsored path instead.
  *
- * SECURITY: `config` carries the on-chain ids (`sac`, `authorizer`, `onboard`)
- * the holder will authorize in one signature. If it originated from
- * `discoverOnboarder` (an issuer-advertised, untrusted stellar.toml), it MUST be
- * reconciled against the pinned registry first — pass `network` to
- * `discoverOnboarder` or call `reconcileWithRegistry` — or a spoofed toml can
- * redirect the trustline/authorize to attacker-controlled contracts.
+ * SECURITY: `config.sac` is the contract the holder's trustline is created
+ * against, and `config.router` is what the holder authorizes in one
+ * signature. If `config` originated from `discoverOnboarder` (an untrusted
+ * stellar.toml), it MUST be reconciled against the pinned registry first —
+ * pass `network` to `discoverOnboarder` or call `reconcileWithRegistry` —
+ * and the router SHOULD be the pinned `ROUTERS` id, never an advertised one.
  */
 export async function buildOnboardTx(
 	opts: BuildOnboardOptions,
 ): Promise<string> {
-	if (!opts.config.onboard) {
-		throw new Error(
-			"config.onboard is required for the one-signature path; the issuer has not deployed the onboard wrapper",
-		)
+	if (!opts.config.sac) {
+		throw new Error("config.sac is required to build the onboard transaction")
 	}
-	if (!opts.config.sac || !opts.config.authorizer) {
+	if (!opts.config.router) {
 		throw new Error(
-			"config.sac and config.authorizer are required for the one-signature CAP-73 path " +
-				"(regulated / AUTH_REQUIRED assets). An open asset has no authorizer — use " +
-				"buildSponsoredOnboardTx instead.",
+			"config.router is required — the Authline onboard router id for this " +
+				"network (pin it via ROUTERS or your app's router config)",
 		)
 	}
 	const server = new rpc.Server(opts.rpcUrl, {
@@ -73,11 +73,10 @@ export async function buildOnboardTx(
 	})
 	const source = await server.getAccount(opts.holder)
 
-	const onboard = new Contract(opts.config.onboard)
-	const op = onboard.call(
+	const router = new Contract(opts.config.router)
+	const op = router.call(
 		"onboard",
 		new Address(opts.config.sac).toScVal(),
-		new Address(opts.config.authorizer).toScVal(),
 		new Address(opts.holder).toScVal(),
 	)
 

@@ -4,6 +4,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -64,5 +65,37 @@ jobs:
           fi
       - run: npm run install:contracts
       - run: npm run build
-      - name: Run tests
-        run: npm test --if-present
+      - name: Contract tests
+        # The router's core correctness (discovery error-classification, CAP-68
+        # gates) lives in these Rust unit tests; the toolchain is already present
+        # from the scaffold build above.
+        run: npm run test:contracts
+      - name: Unit tests
+        run: npm test
+
+  e2e-testnet:
+    if: github.event_name == 'workflow_dispatch'
+    # Serialize manual runs: they share fixed testnet ids (USDC/TLO SACs) and an
+    # idempotent funded deploy, so two concurrent dispatches must not interleave.
+    concurrency:
+      group: e2e-testnet
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run:
+          sudo apt-get update && sudo apt-get install -y libudev-dev
+          libdbus-1-dev pkg-config
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install Stellar CLI
+        run: cargo binstall --no-confirm stellar-cli
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Node SDK testnet e2e
+        run: npm run test:e2e:testnet
+      - name: Playwright browser testnet e2e
+        run: npm run test:e2e

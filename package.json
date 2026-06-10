@@ -8,12 +8,20 @@
     "prestart": "npm run build -w @theaha/authline",
     "start": "concurrently --kill-others-on-fail --names stellar,vite -c gray,green --pad-prefix \"stellar scaffold watch --build-clients\" \"vite\"",
     "build": "npm run build -w @theaha/authline && tsc -b && vite build",
+    "build:e2e": "npm run build -w @theaha/authline && tsc -b && vite build --mode e2e",
+    "build:e2e:tlo": "npm run build:e2e && vite build --mode e2e-tlo --outDir dist/tlo",
     "install:contracts": "if ls packages/*/package.json >/dev/null 2>&1; then npm run build --workspaces --if-present; else echo 'No contract client packages present; skipping install:contracts.'; fi",
+    "test:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo test -p trustline-onboard -p authorizer-stub",
+    "build:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo build --release --target wasm32v1-none -p trustline-onboard",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier . --write",
     "prepare": "husky",
-    "typecheck": "tsc"
+    "test": "vitest run",
+    "typecheck": "tsc",
+    "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs",
+    "test:e2e:testnet": "RUN_TESTNET_E2E=1 vitest run tests/e2e",
+    "test:e2e": "playwright test"
   },
   "workspaces": [
     "packages/*"
@@ -28,6 +36,7 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
@@ -42,7 +51,8 @@
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
     "vite-plugin-node-polyfills": "^0.25.0",
-    "vite-plugin-wasm": "^3.5.0"
+    "vite-plugin-wasm": "^3.5.0",
+    "vitest": "^3.2.6"
   },
   "lint-staged": {
     "**/*": [
