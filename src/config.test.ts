@@ -35,6 +35,19 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSETS[0]).toMatchObject({ code: "USDC", status: "live" })
 	})
 
+	it("defaults to the testnet test token (USDC) when PUBLIC_ASSET_CODE is unset on testnet", async () => {
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Test SDF Network ; September 2015",
+		)
+		// PUBLIC_ASSET_CODE intentionally unset — must NOT fall back to mainnet
+		// EURCV (which has no testnet issuer/SAC), but to the pinned testnet token.
+		const { ASSET } = await import("./config")
+		expect(ASSET.assetCode).toBe("USDC")
+		expect(ASSET.sac).toBe(TESTNET_USDC_SAC)
+		expect(ASSET.capability).toBe("open")
+	})
+
 	it("prefers PUBLIC_ROUTER over the pinned router", async () => {
 		vi.stubEnv("PUBLIC_ASSET_CODE", "USDC")
 		vi.stubEnv("PUBLIC_ASSET_ISSUER", TESTNET_USDC_ISSUER)

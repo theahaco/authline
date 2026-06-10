@@ -67,12 +67,18 @@ warnIfInvalid(
 	"url",
 )
 
-const CODE = import.meta.env.PUBLIC_ASSET_CODE ?? "EURCV"
 // Resolve the pinned registry entry by (code, network) — never by code alone, so
 // a known code on testnet does not pick up a mainnet asset's name/clawback flags.
 // Env always wins for display; on-chain ids prefer env and fall back to the
 // registry-verified pinned ids so a known asset is fully wired.
 const NET_TAG = netFromPassphrase(NETWORK.passphrase)
+// Network-aware default asset: mainnet showcases EURCV (the production target);
+// every other network defaults to the pinned testnet test token (USDC), which
+// has a real testnet issuer/SAC. So a dev pointing at testnet/local without
+// setting PUBLIC_ASSET_CODE gets a working asset instead of mainnet EURCV (which
+// has no testnet issuer/SAC and cannot be activated). Override with PUBLIC_ASSET_CODE.
+const CODE =
+	import.meta.env.PUBLIC_ASSET_CODE ?? (NET_TAG === "PUBLIC" ? "EURCV" : "USDC")
 const pinned = resolveOfficialAsset(CODE, NET_TAG)
 
 /** The live, wired asset (the one the dApp actually activates on-chain). */
