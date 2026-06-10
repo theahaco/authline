@@ -22,7 +22,7 @@ export function defaultAllowHttp(rpcUrl: string): boolean {
 }
 
 export interface BuildOnboardOptions {
-	/** Soroban RPC URL. */
+	/** Stellar RPC URL. */
 	rpcUrl: string
 	/** Network passphrase (mainnet / testnet). */
 	networkPassphrase: string
@@ -36,7 +36,7 @@ export interface BuildOnboardOptions {
 /**
  * Build the **one-signature** onboarding transaction. The returned base64 XDR
  * is unsigned: hand it to the wallet (e.g. Stellar Wallets Kit) for the holder
- * to sign, then submit via Soroban RPC.
+ * to sign, then submit via Stellar RPC.
  *
  * On-chain this invokes the Authline router's `onboard(sac, holder)`, which
  * runs CAP-73 `SAC.trust(holder)` and then DISCOVERS the asset's capability

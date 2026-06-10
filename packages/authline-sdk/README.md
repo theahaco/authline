@@ -42,7 +42,7 @@ const xdr = await buildOnboardTx({
 	holder: userPublicKey,
 	config: { ...config, router: ROUTERS.TESTNET },
 })
-// Hand `xdr` to the wallet to sign (one signature), then submit via Soroban RPC.
+// Hand `xdr` to the wallet to sign (one signature), then submit via Stellar RPC.
 ```
 
 ## React
