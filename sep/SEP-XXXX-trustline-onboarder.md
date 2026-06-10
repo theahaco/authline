@@ -11,7 +11,7 @@ Track: Standard
 Status: Draft
 Created: 2026-06-04
 Discussion: https://github.com/stellar/stellar-protocol/discussions/[placeholder]
-Version: 0.2
+Version: 0.3
 ```
 
 ## Simple Summary
@@ -206,7 +206,8 @@ interpreted as described in [RFC 2119](https://www.ietf.org/rfc/rfc2119.txt).
      ▼                                    │
  Integrator ──reads toml──► detects class, builds tx ─┐
    (3rd party)                                        │ require_auth(holder)
- Holder ──≤1 signature──► Onboard.onboard(sac, authorizer, holder)
+ Holder ──≤1 signature──► Onboard.onboard(sac, holder)
+                                    (discovers admin via CAP-68)
                                                       │
                                        ┌──────────────┴───────────────┐
                                        ▼                              ▼
@@ -227,7 +228,8 @@ reading the issuer account's `auth_required` flag:
 For an open asset, the entire `[TRUSTLINE_ONBOARDER]` Authorizer/onboard-wrapper
 machinery is unnecessary: the flow reduces to a sponsored, reserve-free
 `ChangeTrust`. The standard MUST NOT require an Authorizer for assets that are
-not `AUTH_REQUIRED`.
+not `AUTH_REQUIRED`. Alternatively, an integrator MAY skip pre-classification
+entirely: simulate `onboard(sac, holder)` and read the would-be `OnboardStatus`.
 
 ### 2. The three onboarding cases
 
@@ -283,6 +285,12 @@ Semantics of `authorize_trustline`:
 - It MUST NOT authorize the Authorizer contract itself
   (`CannotAuthorizeAdminContract`).
 - It MUST return `ContractPaused` when the contract is paused.
+- It MUST signal every rejection with a **typed contract error** (the error
+  table below). Callers — including the Onboard router — MUST interpret an
+  untyped abort (missing export, panic, host error) as "no one-step authorizer
+  interface" (`TrustlineOnly`), never as a rejection. An authorizer that panics
+  instead of returning a typed error will therefore be treated as absent, and
+  holders will be left with unauthorized trustlines.
 
 #### Policy model
 
@@ -371,44 +379,116 @@ points on `admin().require_auth()`.
 
 ### 4. One-signature onboard composition (over CAP-73)
 
-The Trustline Onboard wrapper composes trustline creation and authorization
-atomically. It follows the **merged** reference (`stellar-assets` PR #10,
-public, 2026-06-05), which already exposes a generic
-`onboard(sac, authorizer, holder)` over any `(sac, authorizer, holder)`:
+The Trustline Onboard router composes trustline creation and authorization
+atomically, **discovering** the authorizer from `SAC.admin()` (CAP-68
+`get_address_executable`) instead of taking it as a parameter.
 
 ```rust
-/// One-signature onboarding: create the holder's trustline (CAP-73) and authorize it.
-/// `sac`        — Stellar Asset Contract address of the AUTH_REQUIRED asset.
-/// `authorizer` — Trustline Authorizer contract (the SAC admin) implementing §3.
-/// `holder`     — the G-account being onboarded.
-fn onboard(env: Env, sac: Address, authorizer: Address, holder: Address) -> Result<(), Error> {
+/// Outcome of `onboard`, reported truthfully from on-chain state.
+#[contracttype]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum OnboardStatus {
+    /// Trustline exists and is authorized — the holder can receive the asset.
+    Authorized,
+    /// Trustline exists but is not authorized: the asset is AUTH_REQUIRED and
+    /// its SAC admin offers no one-step `authorize_trustline` interface — the
+    /// issuer authorizes off-platform (manual path).
+    TrustlineOnly,
+}
+
+/// One-signature onboarding with ON-CHAIN capability discovery.
+/// `sac`    — Stellar Asset Contract address of the asset (any class).
+/// `holder` — the G-account being onboarded.
+/// Create the holder's trustline and, when the asset's SAC admin is a
+/// contract exposing `authorize_trustline`, authorize it — all under one
+/// holder signature. The asset's capability is DISCOVERED on-chain
+/// (CAP-68 `get_address_executable` + `SAC.admin()`), not configured.
+///
+/// Returns `Authorized` when the trustline is usable, `TrustlineOnly`
+/// when the asset is AUTH_REQUIRED with no one-step authorizer (the
+/// trustline is kept; the issuer authorizes off-platform).
+///
+/// **Atomic on rejection:** if the discovered authorizer rejects the
+/// holder with a typed contract error, the WHOLE transaction (including
+/// the trustline creation) is rolled back.
+///
+/// **Immutable by design:** no admin or upgrade entrypoint; fixing a bug
+/// means deploying a new instance and updating the pinned router id.
+///
+/// # Security
+///
+/// The discovered admin is a contract CHOSEN BY THE ASSET, executed under
+/// the holder's signed authorization tree: in recording-mode simulation,
+/// any nested `holder.require_auth()` the admin triggers is folded into
+/// the single root auth entry the holder signs. The router cannot prevent
+/// a malicious admin from abusing this — only onboard SACs from a
+/// trusted/pinned source, and wallets SHOULD render the full auth tree.
+pub fn onboard(env: Env, sac: Address, holder: Address) -> Result<OnboardStatus, Error> {
     holder.require_auth();
-    // CAP-73: create an unlimited trustline if none exists (holder pays 0.5 XLM reserve).
-    StellarAssetClient::new(&env, &sac)
+
+    // Anti-copycat, on-chain: only a built-in SAC has classic trustlines.
+    if !matches!(sac.executable(), Some(Executable::StellarAsset)) {
+        return Err(Error::NotSac);
+    }
+    let sac_client = StellarAssetClient::new(&env, &sac);
+
+    // CAP-73: create the trustline if needed (silent no-op when it
+    // already exists; created UNauthorized for an AUTH_REQUIRED issuer).
+    sac_client
         .try_trust(&holder)
-        .map_err(|_| Error::TrustFailed)?           // outer: host/invocation error
-        .map_err(|_| Error::TrustFailed)?;          // inner: contract Result error
-    // Delegated authorization via the SAC admin (policy-checked).
-    AuthorizerClient::new(&env, &authorizer)
-        .try_authorize_trustline(&holder)
-        .map_err(|_| Error::AuthorizationFailed)?   // outer
-        .map_err(|_| Error::AuthorizationFailed)?;  // inner
-    Ok(())
+        .map_err(|_| Error::TrustFailed)?
+        .map_err(|_| Error::TrustFailed)?;
+
+    // Open asset, or already authorized: done.
+    if sac_client.authorized(&holder) {
+        return Ok(OnboardStatus::Authorized);
+    }
+
+    // Discover the one-step capability from the only address the
+    // protocol allows to authorize: the SAC admin. A non-wasm admin
+    // (G-account, SAC, nonexistent) cannot expose the interface.
+    let admin = sac_client.admin();
+    if !matches!(admin.executable(), Some(Executable::Wasm(_))) {
+        return Ok(OnboardStatus::TrustlineOnly);
+    }
+    match AuthorizerClient::new(&env, &admin).try_authorize_trustline(&holder) {
+        // Post-condition: the authorizer must have authorized the holder
+        // on THIS sac — guards a no-op or divergent authorizer. Also
+        // covers a wrong-return-shape success (Ok(Err(ConversionError))):
+        // the post-condition resolves it either way.
+        Ok(_) => {
+            if sac_client.authorized(&holder) {
+                Ok(OnboardStatus::Authorized)
+            } else {
+                Err(Error::NotAuthorized)
+            }
+        }
+        // A typed contract error is a REJECTION (SEP rule) — revert
+        // everything, including the trustline.
+        Err(Ok(e)) if e.is_type(ScErrorType::Contract) => Err(Error::AuthorizationRefused),
+        // Statically unreachable for E = soroban_sdk::Error (its error
+        // conversion is infallible, so typed rejections always surface
+        // as Err(Ok(_)) above); kept as defense-in-depth.
+        Err(Err(soroban_sdk::InvokeError::Contract(_))) => Err(Error::AuthorizationRefused),
+        // Anything else (squashed Context/InvalidAction abort: missing
+        // export or an untyped panic) means "no authorize_trustline
+        // interface": keep the trustline and report it truthfully.
+        Err(_) => Ok(OnboardStatus::TrustlineOnly),
+    }
 }
 ```
-
-> The nested `.map_err(…)?.map_err(…)?` matches PR #10's source: soroban-sdk
-> `try_` methods return `Result<Result<T, ContractErr>, HostErr>`, so each inner
-> call is unwrapped twice (the idiomatic `try_trust(&holder)??` form is
-> equivalent). Earlier renderings that showed a single `?` were simplified for
-> readability and would **not** compile against the `try_` signature; this form
-> does, and maps failures to `Error::TrustFailed` /
-> `Error::AuthorizationFailed`.
 
 Properties:
 
 - The **only** required authorization is `holder.require_auth()` — one signature
   on a single Soroban transaction (Case C).
+- `onboard` returns `OnboardStatus::Authorized` or
+  `OnboardStatus::TrustlineOnly` — the caller learns the asset's class from the
+  return value (or a simulation of it) rather than pre-classifying.
+- A typed contract error from the discovered authorizer is a REJECTION and
+  reverts the whole transaction, including the trustline. An untyped abort
+  (missing export, panic) is read as _no one-step interface_ and yields
+  `TrustlineOnly`.
 - `try_trust` is a no-op if the trustline already exists, so `onboard()` is
   **idempotent with respect to trustline creation** and MAY be retried safely.
   Idempotency is scoped to trustline creation only: it does **not** bypass
@@ -427,17 +507,16 @@ This is **Option A** of the RFP — _authorize trustlines on behalf of users via
 standard interface_. See Design Rationale for why (a) is preferred over (b) an
 intermediate account and (c) claimable balances.
 
-> **Verification status.** The **merged** reference (PR #10, public, 2026-06-05)
-> ships `cargo test` coverage for the `trustline-onboard` contract — the success
-> path, an `AuthorizationFailed` case, and a `NotAuthorized` post-condition
-> (`require sac.authorized(holder)`, which closes the SAC-divergence risk) — run
-> under mocked auth against an **authorizer stub**. This demonstrates that the
-> **contract-level composition compiles and the happy path authorizes the holder
-> through the (stub) SAC admin under mocked auth**, and that divergence reverts.
-> It does **not** prove an end-to-end single _real_ signature — that step is an
-> explicitly unchecked box in the PR's own test plan and is delivered against a
-> real Authorizer on testnet/mainnet by the grant deliverables, not asserted by
-> the unit test.
+> **Verification status.** The reference implementation ships the 2-arg
+> discovery router with a 16-test native suite (10 scenario + 6
+> environment-classification tests) plus testnet e2e for both the open (USDC)
+> and discovery (TLO) paths. This demonstrates that the **contract-level
+> composition compiles and the happy path authorizes the holder through the
+> on-chain discovered admin under mocked auth**, and that divergence reverts. It
+> does **not** prove an end-to-end single _real_ signature — that step is an
+> explicitly unchecked box in the test plan and is delivered against a real
+> Authorizer on testnet/mainnet by the grant deliverables, not asserted by the
+> unit test.
 
 ### 5. The two reserve backends and integrator selection
 
@@ -520,19 +599,19 @@ an issuer advertises onboarder support with a `[TRUSTLINE_ONBOARDER]` table in
 its `stellar.toml`. Any integrator reads exactly this block to drive the flow —
 one issuer config yields universal interop, with no bilateral integration deals.
 
-| Field               | Type   | Req.  | Description                                                                                                  |
-| ------------------- | ------ | :---: | ------------------------------------------------------------------------------------------------------------ |
-| `VERSION`           | string |  yes  | Onboarder protocol version this issuer implements (e.g., `"0.2"`).                                           |
-| `ASSET_CODE`        | string |  yes  | Classic asset code being onboarded.                                                                          |
-| `ASSET_ISSUER`      | `G…`   |  yes  | Classic issuer account.                                                                                      |
-| `SAC`               | `C…`   |  yes  | Stellar Asset Contract address of the asset.                                                                 |
-| `AUTHORIZER`        | `C…`   | cond. | Trustline Authorizer contract (the SAC admin). REQUIRED for `AUTH_REQUIRED` assets; omitted for open assets. |
-| `ONBOARD_WRAPPER`   | `C…`   | cond. | Trustline Onboard wrapper exposing `onboard()`. REQUIRED if `cap73-onesig` is in `BACKENDS`.                 |
-| `POLICY`            | string | cond. | `"denylist"` or `"allowlist"`. REQUIRED when `AUTHORIZER` is set.                                            |
-| `BACKENDS`          | list   |  yes  | Ordered preference, subset of `["cap73-onesig", "cap33-sponsored"]`.                                         |
-| `SPONSOR`           | `G…`   | cond. | Reserve sponsor account. REQUIRED if `cap33-sponsored` is in `BACKENDS`.                                     |
-| `AUTH_ENDPOINT`     | url    |  no   | Off-chain authorization/KYC endpoint (allowlist policy). SHOULD be SEP-10 gated.                             |
-| `WEB_AUTH_ENDPOINT` | url    | cond. | SEP-10 endpoint used to authenticate to `AUTH_ENDPOINT`. REQUIRED if `AUTH_ENDPOINT` is set.                 |
+| Field               | Type   | Req.  | Description                                                                                                                                                                                               |
+| ------------------- | ------ | :---: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VERSION`           | string |  yes  | Onboarder protocol version this issuer implements (e.g., `"0.2"`).                                                                                                                                        |
+| `ASSET_CODE`        | string |  yes  | Classic asset code being onboarded.                                                                                                                                                                       |
+| `ASSET_ISSUER`      | `G…`   |  yes  | Classic issuer account.                                                                                                                                                                                   |
+| `SAC`               | `C…`   |  yes  | Stellar Asset Contract address of the asset.                                                                                                                                                              |
+| `AUTHORIZER`        | `C…`   |  no   | Trustline Authorizer contract (the SAC admin). INFORMATIONAL for the one-signature path (the router discovers the admin on-chain); used by integrators for the zero-signature Case-A authorize-on-behalf. |
+| `ONBOARD_WRAPPER`   | `C…`   | cond. | The Trustline Onboard **router** exposing `onboard(sac, holder)`. REQUIRED if `cap73-onesig` is in `BACKENDS`. Integrators SHOULD prefer a pinned/curated router id over an advertised one.               |
+| `POLICY`            | string | cond. | `"denylist"` or `"allowlist"`. REQUIRED when `AUTHORIZER` is set.                                                                                                                                         |
+| `BACKENDS`          | list   |  yes  | Ordered preference, subset of `["cap73-onesig", "cap33-sponsored"]`.                                                                                                                                      |
+| `SPONSOR`           | `G…`   | cond. | Reserve sponsor account. REQUIRED if `cap33-sponsored` is in `BACKENDS`.                                                                                                                                  |
+| `AUTH_ENDPOINT`     | url    |  no   | Off-chain authorization/KYC endpoint (allowlist policy). SHOULD be SEP-10 gated.                                                                                                                          |
+| `WEB_AUTH_ENDPOINT` | url    | cond. | SEP-10 endpoint used to authenticate to `AUTH_ENDPOINT`. REQUIRED if `AUTH_ENDPOINT` is set.                                                                                                              |
 
 Example (regulated asset, denylist / open-by-default):
 
@@ -617,7 +696,7 @@ the Authorizer admin.
 Integrator (3rd party)              Holder                      Chain
     │ GET <issuer>/.well-known/stellar.toml; assetAuthRequired() │
     │◄── [TRUSTLINE_ONBOARDER] ────────┤                           │
-    │ build tx: invoke ONBOARD_WRAPPER.onboard(SAC, AUTHORIZER, holder)
+    │ build tx: invoke ONBOARD_WRAPPER.onboard(SAC, holder)
     │── SEP-7 URI / deep link ────────►│                           │
     │                                  │ sign (1 holder signature) │
     │◄─────────────────────────────────┤                           │
@@ -750,6 +829,14 @@ with a one-time admin transfer.
   and can `upgrade` the contract. Issuers SHOULD use a multisig or threshold
   account as the Authorizer admin (`admin-sep` `set_admin`), and SHOULD treat
   `upgrade` and `clawback` as the highest-privilege operations.
+- **The holder's signature covers the discovered admin's sub-invocations.**
+  `onboard()` invokes the asset's SAC admin — a contract chosen by the _asset_,
+  not by the integrator. In recording-mode simulation, any nested
+  `holder.require_auth()` the admin triggers is folded into the single root
+  authorization the holder signs, and the router cannot prevent a malicious
+  admin from abusing this. Integrators MUST therefore only onboard SACs from a
+  trusted/pinned source (the curated registry), and wallets SHOULD render the
+  full authorization tree before signing.
 - **Permissionless self-authorization (denylist).** Under the denylist policy,
   `authorize_trustline` is intentionally permissionless — any non-banned account
   may authorize itself or be authorized on-behalf. Issuers requiring per-user
@@ -814,15 +901,15 @@ The public reference implementation (work in progress for SCF #44) is at
 [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)
 (Apache-2.0).
 
-| Component                                                                                                                                                                                                                                                                        | Status                                                                                                    | Reference                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `eurcv_auth` Trustline Authorizer (denylist, set as SAC admin; `authorize_trustline`, `add/remove_banned_accounts`, `freeze/unfreeze_accounts`, `deauthorize_trustline`, `clawback`, `mint_to_account`, `pause/unpause`, `upgrade`)                                              | **LIVE on mainnet**                                                                                       | `theahaco/eurcv_auth` (repo private — available on request); mainnet contract [`CB2DHZ…KSB3` on Stellar Expert](https://stellar.expert/explorer/public/contract/CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3); activation page `https://eurcv.theaha.co` (currently a two-step / two-transaction flow, not yet one-signature)                                                                                                                                                                                                                                                                                 |
-| `onboard()` one-signature wrapper over CAP-73 `trust()`                                                                                                                                                                                                                          | **MERGED** (public; 2026-06-05) — contract-level tested; live one-signature run + mainnet rollout pending | [github.com/theahaco/stellar-assets PR #10](https://github.com/theahaco/stellar-assets/pull/10) — _"Multi-asset Stellar asset onboarding (Protocol 26 / CAP-73 one-step)."_ Ships a generic `onboard(sac, authorizer, holder)` (de-EURCV-ified to an `Authorizer` trait) + a curated, issuer-pinned registry (USDC/EURC/EURCV). `cargo test` covers the success path, an `AuthorizationFailed` case, and a `NotAuthorized` post-condition under mocked auth against a stub authorizer — proving the contract-level composition, **not** a live single real signature (an explicitly unchecked box in the PR's test plan). |
-| Contract Admin SEP (`Administratable` + `Upgradable`) — built upon by §3                                                                                                                                                                                                         | Draft                                                                                                     | [github.com/theahaco/admin-sep](https://github.com/theahaco/admin-sep) (SDF discussion #1670)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Asset-agnostic **Trustline Authorizer** (testnet)                                                                                                                                                                                                                                | **DEPLOYED + WORKING on testnet** (this grant)                                                            | `CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **Trustline Onboard** CAP-73 wrapper (testnet)                                                                                                                                                                                                                                   | **DEPLOYED + WORKING on testnet** (this grant)                                                            | `CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Test asset **TLO** (`AUTH_REQUIRED`) — SAC / issuer                                                                                                                                                                                                                              | testnet                                                                                                   | SAC `CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3`, issuer `GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `@theaha/authline` integrator SDK (`discover`, `assetAuthRequired`, `status`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                                                                              | [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Component                                                                                                                                                                                                                                                                        | Status                                         | Reference                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eurcv_auth` Trustline Authorizer (denylist, set as SAC admin; `authorize_trustline`, `add/remove_banned_accounts`, `freeze/unfreeze_accounts`, `deauthorize_trustline`, `clawback`, `mint_to_account`, `pause/unpause`, `upgrade`)                                              | **LIVE on mainnet**                            | `theahaco/eurcv_auth` (repo private — available on request); mainnet contract [`CB2DHZ…KSB3` on Stellar Expert](https://stellar.expert/explorer/public/contract/CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3); activation page `https://eurcv.theaha.co` (currently a two-step / two-transaction flow, not yet one-signature) |
+| `onboard()` one-signature discovery router over CAP-73 `trust()`                                                                                                                                                                                                                 | **DEPLOYED + WORKING on testnet** (this grant) | `contracts/trustline-onboard` in this repo — `onboard(sac, holder)` with on-chain authorizer discovery (CAP-68 `get_address_executable` + `SAC.admin()`). Ships a 16-test native suite (10 scenario + 6 environment-classification tests) plus testnet e2e for both the open (USDC) and discovery (TLO) paths.                            |
+| Contract Admin SEP (`Administratable` + `Upgradable`) — built upon by §3                                                                                                                                                                                                         | Draft                                          | [github.com/theahaco/admin-sep](https://github.com/theahaco/admin-sep) (SDF discussion #1670)                                                                                                                                                                                                                                             |
+| Asset-agnostic **Trustline Authorizer** (testnet)                                                                                                                                                                                                                                | **DEPLOYED + WORKING on testnet** (this grant) | `CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU`                                                                                                                                                                                                                                                                                |
+| **Trustline Onboard** CAP-73 wrapper (testnet)                                                                                                                                                                                                                                   | **DEPLOYED + WORKING on testnet** (this grant) | `CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5`                                                                                                                                                                                                                                                                                |
+| Test asset **TLO** (`AUTH_REQUIRED`) — SAC / issuer                                                                                                                                                                                                                              | testnet                                        | SAC `CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3`, issuer `GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U`                                                                                                                                                                                                         |
+| `@theaha/authline` integrator SDK (`discover`, `assetAuthRequired`, `status`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                   | [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)                                                                                                                                                                                                                                                          |
 
 #### Proven on testnet
 
@@ -853,5 +940,6 @@ CAP-73 is the protocol dependency:
 
 | Version | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.3     | 2026-06-10 | `onboard` is now `onboard(sac, holder)` with on-chain authorizer discovery (CAP-68 `get_address_executable` + `SAC.admin()`); added `OnboardStatus` (`Authorized` / `TrustlineOnly`) and the typed-error rejection rule (§3); `AUTHORIZER` in `[TRUSTLINE_ONBOARDER]` demoted to informational; integrators MAY classify assets by simulating `onboard()`; documented the holder-signature-over-admin-subinvocations boundary (Security Considerations).                    |
 | 0.2     | 2026-06-04 | Reframed around third-party onboarding; added the two asset classes (open vs. regulated) and asset-class detection via `auth_required`; added the three onboarding cases (A zero-sig / B sponsored one-tap / C CAP-73 one-tx); added the integrator interface and SEP-7 / deep-link / hosted-redirect handoffs; documented (b)/(c) as situational alternatives; added testnet deployment ids, the proven testnet exchange-withdrawal run, and the P26 JS-SDK decode caveat. |
 | 0.1     | 2026       | Initial draft. Defined roles, denylist/allowlist authorization-delegation interface (built on `admin-sep`), CAP-73 one-signature `onboard()` composition, the freeze = ban/disallow + deauthorize lifecycle and per-call policy evaluation, two reserve backends (CAP-73 funded-holder / CAP-33 sponsored), `[TRUSTLINE_ONBOARDER]` `stellar.toml` discovery block, activation flow, and audit events.                                                                      |

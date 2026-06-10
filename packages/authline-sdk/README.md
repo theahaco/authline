@@ -18,7 +18,7 @@ import { discoverOnboarder } from "@theaha/authline"
 // then reconciled against the pinned registry, so a spoofed stellar.toml whose
 // ids differ from the curated values is rejected (throws) instead of trusted.
 const config = await discoverOnboarder("theaha.co", { network: passphrase })
-// { assetCode: "EURCV", assetIssuer: "G...", sac: "C...", authorizer: "C...", onboard: "C...", backends: [...] }
+// { assetCode: "EURCV", assetIssuer: "G...", sac: "C...", router: "C...", authorizer: "C...", backends: [...] }
 ```
 
 > Without `network`, `discoverOnboarder` returns the issuer's **unverified**
