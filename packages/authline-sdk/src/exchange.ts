@@ -89,8 +89,12 @@ export async function buildSponsoredOnboardTx(opts: {
 	config: OnboarderConfig
 	/** Set when the user account does not exist yet (sponsored CreateAccount). */
 	createUserAccount?: boolean
+	/** Allow a cleartext-http Horizon; defaults to localhost-only (`defaultAllowHttp`). */
+	allowHttp?: boolean
 }): Promise<string> {
-	const horizon = new Horizon.Server(opts.horizonUrl)
+	const horizon = new Horizon.Server(opts.horizonUrl, {
+		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.horizonUrl),
+	})
 	const src = await horizon.loadAccount(opts.sponsor)
 	const asset = new Asset(opts.config.assetCode, opts.config.assetIssuer)
 	const b = new TransactionBuilder(src, {

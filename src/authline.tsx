@@ -803,6 +803,7 @@ export function AuthlineApp() {
 			setAddress(a)
 			getActivationStatus({
 				horizonUrl: NETWORK.horizonUrl,
+				allowHttp: NETWORK.allowHttp,
 				account: a,
 				assetCode: ASSET.assetCode,
 				assetIssuer: ASSET.assetIssuer,
@@ -833,6 +834,7 @@ export function AuthlineApp() {
 			setAddress(addr)
 			const st = await getActivationStatus({
 				horizonUrl: NETWORK.horizonUrl,
+				allowHttp: NETWORK.allowHttp,
 				account: addr,
 				assetCode: ASSET.assetCode,
 				assetIssuer: ASSET.assetIssuer,

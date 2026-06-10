@@ -1,4 +1,5 @@
 import { Horizon } from "@stellar/stellar-sdk"
+import { defaultAllowHttp } from "./onboard.js"
 
 export interface ActivationStatus {
 	/** Whether the account holds a trustline for the asset. */
@@ -16,8 +17,12 @@ export interface ActivationStatus {
 export async function assetAuthRequired(args: {
 	horizonUrl: string
 	assetIssuer: string
+	/** Allow a cleartext-http Horizon; defaults to localhost-only (`defaultAllowHttp`). */
+	allowHttp?: boolean
 }): Promise<boolean> {
-	const horizon = new Horizon.Server(args.horizonUrl)
+	const horizon = new Horizon.Server(args.horizonUrl, {
+		allowHttp: args.allowHttp ?? defaultAllowHttp(args.horizonUrl),
+	})
 	try {
 		const issuer = await horizon.loadAccount(args.assetIssuer)
 		return !!issuer.flags?.auth_required
@@ -46,8 +51,12 @@ export async function getActivationStatus(args: {
 	account: string
 	assetCode: string
 	assetIssuer: string
+	/** Allow a cleartext-http Horizon; defaults to localhost-only (`defaultAllowHttp`). */
+	allowHttp?: boolean
 }): Promise<ActivationStatus> {
-	const horizon = new Horizon.Server(args.horizonUrl)
+	const horizon = new Horizon.Server(args.horizonUrl, {
+		allowHttp: args.allowHttp ?? defaultAllowHttp(args.horizonUrl),
+	})
 	try {
 		const acc = await horizon.loadAccount(args.account)
 		const tl = acc.balances.find(

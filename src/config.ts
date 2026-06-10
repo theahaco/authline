@@ -3,6 +3,7 @@ import {
 	netFromPassphrase,
 	isValidIssuer,
 	isValidContractId,
+	defaultAllowHttp,
 	ROUTERS,
 	type AssetCapability,
 	type OnboarderConfig,
@@ -13,17 +14,23 @@ import {
  * the Pages workflow). Add/replace the live asset by config alone.
  */
 
+const RPC_URL =
+	import.meta.env.PUBLIC_STELLAR_RPC_URL ??
+	"https://soroban-testnet.stellar.org"
+const HORIZON_URL =
+	import.meta.env.PUBLIC_STELLAR_HORIZON_URL ??
+	"https://horizon-testnet.stellar.org"
+
 export const NETWORK = {
-	rpcUrl:
-		import.meta.env.PUBLIC_STELLAR_RPC_URL ??
-		"https://soroban-testnet.stellar.org",
-	horizonUrl:
-		import.meta.env.PUBLIC_STELLAR_HORIZON_URL ??
-		"https://horizon-testnet.stellar.org",
+	rpcUrl: RPC_URL,
+	horizonUrl: HORIZON_URL,
 	passphrase:
 		import.meta.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE ??
 		"Test SDF Network ; September 2015",
-	allowHttp: false,
+	// Permit cleartext http only for a local quickstart (localhost/127.0.0.1);
+	// any remote endpoint stays https-only. Mirrors the SDK's defaultAllowHttp so
+	// `stellar scaffold watch` against a local node works without a footgun flag.
+	allowHttp: defaultAllowHttp(RPC_URL) || defaultAllowHttp(HORIZON_URL),
 }
 
 export const NETWORK_LABEL = NETWORK.passphrase.includes("Public")
