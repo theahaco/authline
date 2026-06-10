@@ -802,7 +802,7 @@ export function AuthlineApp() {
 		if (a && isValidIssuer(a)) {
 			setAddress(a)
 			getActivationStatus({
-				horizonUrl: NETWORK.horizonUrl,
+				rpcUrl: NETWORK.rpcUrl,
 				allowHttp: NETWORK.allowHttp,
 				account: a,
 				assetCode: ASSET.assetCode,
@@ -833,7 +833,7 @@ export function AuthlineApp() {
 			setShowModal(false)
 			setAddress(addr)
 			const st = await getActivationStatus({
-				horizonUrl: NETWORK.horizonUrl,
+				rpcUrl: NETWORK.rpcUrl,
 				allowHttp: NETWORK.allowHttp,
 				account: addr,
 				assetCode: ASSET.assetCode,

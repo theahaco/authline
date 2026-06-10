@@ -69,7 +69,6 @@ export {
 export {
 	getActivationStatus,
 	getActivationStatus as status,
-	assetAuthRequired,
 	type ActivationStatus,
 } from "./status.js"
 // Third-party (exchange / broker / wallet) integration surface.

@@ -17,20 +17,16 @@ import {
 const RPC_URL =
 	import.meta.env.PUBLIC_STELLAR_RPC_URL ??
 	"https://soroban-testnet.stellar.org"
-const HORIZON_URL =
-	import.meta.env.PUBLIC_STELLAR_HORIZON_URL ??
-	"https://horizon-testnet.stellar.org"
 
 export const NETWORK = {
 	rpcUrl: RPC_URL,
-	horizonUrl: HORIZON_URL,
 	passphrase:
 		import.meta.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE ??
 		"Test SDF Network ; September 2015",
 	// Permit cleartext http only for a local quickstart (localhost/127.0.0.1);
 	// any remote endpoint stays https-only. Mirrors the SDK's defaultAllowHttp so
 	// `stellar scaffold watch` against a local node works without a footgun flag.
-	allowHttp: defaultAllowHttp(RPC_URL) || defaultAllowHttp(HORIZON_URL),
+	allowHttp: defaultAllowHttp(RPC_URL),
 }
 
 export const NETWORK_LABEL = NETWORK.passphrase.includes("Public")
@@ -61,11 +57,6 @@ warnIfInvalid("SAC", import.meta.env.PUBLIC_SAC, "C")
 warnIfInvalid("AUTHORIZER", import.meta.env.PUBLIC_AUTHORIZER, "C")
 warnIfInvalid("ROUTER", import.meta.env.PUBLIC_ROUTER, "C")
 warnIfInvalid("STELLAR_RPC_URL", import.meta.env.PUBLIC_STELLAR_RPC_URL, "url")
-warnIfInvalid(
-	"STELLAR_HORIZON_URL",
-	import.meta.env.PUBLIC_STELLAR_HORIZON_URL,
-	"url",
-)
 
 // Resolve the pinned registry entry by (code, network) — never by code alone, so
 // a known code on testnet does not pick up a mainnet asset's name/clawback flags.

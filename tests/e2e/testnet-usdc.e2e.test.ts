@@ -16,7 +16,6 @@ import { beforeAll, describe, expect, it } from "vitest"
 const RUN = process.env.RUN_TESTNET_E2E === "1"
 const NET = {
 	rpcUrl: "https://soroban-testnet.stellar.org",
-	horizonUrl: "https://horizon-testnet.stellar.org",
 	passphrase: Networks.TESTNET,
 }
 const CONFIG: OnboarderConfig = {
@@ -75,7 +74,7 @@ describe.skipIf(!RUN)("testnet USDC onboard via router (real chain)", () => {
 		expect(got.status).toBe("SUCCESS")
 
 		const st = await getActivationStatus({
-			horizonUrl: NET.horizonUrl,
+			rpcUrl: NET.rpcUrl,
 			account: holder.publicKey(),
 			assetCode: CONFIG.assetCode,
 			assetIssuer: CONFIG.assetIssuer,

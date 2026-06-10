@@ -15,7 +15,6 @@ import { beforeAll, describe, expect, it } from "vitest"
 const RUN = process.env.RUN_TESTNET_E2E === "1"
 const NET = {
 	rpcUrl: "https://soroban-testnet.stellar.org",
-	horizonUrl: "https://horizon-testnet.stellar.org",
 	passphrase: Networks.TESTNET,
 }
 // TLO is the AUTH_REQUIRED test asset whose SAC admin IS the asset-agnostic
@@ -72,7 +71,7 @@ describe.skipIf(!RUN)("testnet TLO discovery onboard (real chain)", () => {
 		// AUTH_REQUIRED + authorized==true proves the DISCOVERED authorize step
 		// ran — trust alone would leave isAuthorized false for TLO.
 		const st = await getActivationStatus({
-			horizonUrl: NET.horizonUrl,
+			rpcUrl: NET.rpcUrl,
 			account: holder.publicKey(),
 			assetCode: CONFIG.assetCode,
 			assetIssuer: CONFIG.assetIssuer,
