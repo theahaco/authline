@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process"
 import {
 	Keypair,
 	Networks,
@@ -6,9 +5,9 @@ import {
 	rpc,
 } from "@stellar/stellar-sdk"
 import {
+	ROUTERS,
 	buildOnboardTx,
 	getActivationStatus,
-	ROUTERS,
 	type OnboarderConfig,
 } from "@theaha/authline"
 import { beforeAll, describe, expect, it } from "vitest"
@@ -19,21 +18,22 @@ const NET = {
 	horizonUrl: "https://horizon-testnet.stellar.org",
 	passphrase: Networks.TESTNET,
 }
+// TLO is the AUTH_REQUIRED test asset whose SAC admin IS the asset-agnostic
+// authorizer contract (denylist, open-by-default) — see the SEP draft's
+// Reference Implementation table. Onboarding it exercises the router's
+// on-chain DISCOVERY path: trust → admin probe → authorize, one signature.
 const CONFIG: OnboarderConfig = {
-	assetCode: "USDC",
-	assetIssuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
-	sac: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-	// The pinned router id (SDK registry). .env.e2e's PUBLIC_ROUTER feeds only
-	// the Playwright browser build — plain `vitest run` loads no dotenv — so
-	// the Node e2e reads the pin directly, same as every other id here.
+	assetCode: "TLO",
+	assetIssuer: "GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U",
+	sac: "CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3",
+	// The pinned router id (SDK registry) — see the note in the USDC e2e.
 	router: ROUTERS.TESTNET,
-	authorizer: "",
 	backends: ["cap73-one-signature"],
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-describe.skipIf(!RUN)("testnet USDC onboard via router (real chain)", () => {
+describe.skipIf(!RUN)("testnet TLO discovery onboard (real chain)", () => {
 	const holder = Keypair.random()
 
 	beforeAll(async () => {
@@ -41,14 +41,9 @@ describe.skipIf(!RUN)("testnet USDC onboard via router (real chain)", () => {
 			`https://friendbot.stellar.org/?addr=${holder.publicKey()}`,
 		)
 		if (!r.ok) throw new Error("friendbot failed")
-		// Ensure the SAC exists (idempotent).
-		execFileSync("node", ["scripts/deploy-testnet-usdc-sac.mjs"], {
-			stdio: "inherit",
-			env: { ...process.env, SOURCE_SECRET: holder.secret() },
-		})
 	}, 120_000)
 
-	it("creates an authorized USDC trustline via router.onboard", async () => {
+	it("creates AND authorizes an AUTH_REQUIRED trustline via admin discovery", async () => {
 		const xdr = await buildOnboardTx({
 			rpcUrl: NET.rpcUrl,
 			networkPassphrase: NET.passphrase,
@@ -71,9 +66,11 @@ describe.skipIf(!RUN)("testnet USDC onboard via router (real chain)", () => {
 			got = await server.getTransaction(sent.hash)
 		}
 		if (got.status === "NOT_FOUND")
-			throw new Error("trust tx not confirmed within deadline")
+			throw new Error("onboard tx not confirmed within deadline")
 		expect(got.status).toBe("SUCCESS")
 
+		// AUTH_REQUIRED + authorized==true proves the DISCOVERED authorize step
+		// ran — trust alone would leave isAuthorized false for TLO.
 		const st = await getActivationStatus({
 			horizonUrl: NET.horizonUrl,
 			account: holder.publicKey(),
