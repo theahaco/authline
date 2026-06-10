@@ -10,7 +10,7 @@
     "build": "npm run build -w @theaha/authline && tsc -b && vite build",
     "build:e2e": "npm run build -w @theaha/authline && tsc -b && vite build --mode e2e",
     "install:contracts": "if ls packages/*/package.json >/dev/null 2>&1; then npm run build --workspaces --if-present; else echo 'No contract client packages present; skipping install:contracts.'; fi",
-    "test:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo test -p trustline-onboard",
+    "test:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo test -p trustline-onboard -p authorizer-stub",
     "build:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo build --release --target wasm32v1-none -p trustline-onboard",
     "preview": "vite preview",
     "lint": "eslint .",
@@ -19,7 +19,7 @@
     "test": "vitest run",
     "typecheck": "tsc",
     "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs",
-    "test:e2e:testnet": "RUN_TESTNET_E2E=1 vitest run tests/e2e/testnet-usdc.e2e.test.ts",
+    "test:e2e:testnet": "RUN_TESTNET_E2E=1 vitest run tests/e2e",
     "test:e2e": "playwright test"
   },
   "workspaces": [
