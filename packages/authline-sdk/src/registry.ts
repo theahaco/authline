@@ -101,6 +101,25 @@ export const OFFICIAL_ASSETS: OfficialAsset[] = [
 		authClawback: false,
 		verifiedAt: "2026-06-08",
 	},
+	{
+		// Testnet EURCV-style regulated test asset: AUTH_REQUIRED, with the
+		// asset-agnostic Trustline Authorizer set as its SAC admin — so the router
+		// discovers `authorize_trustline` on-chain and authorizes in one step, the
+		// same path mainnet EURCV uses. Issuer auth flags read via Horizon
+		// (2026-06-10); the on-chain discovery + authorize is proven by
+		// tests/e2e/testnet-tlo.e2e.test.ts. Activate it in the dApp with
+		// PUBLIC_ASSET_CODE=TLO.
+		code: "TLO",
+		issuer: "GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U",
+		sac: "CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3",
+		authorizer: "CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
+		capability: "permissionedOneStep",
+		name: "Trustline Onboard Test (EURCV-style)",
+		network: "TESTNET",
+		authRevocable: true,
+		authClawback: false,
+		verifiedAt: "2026-06-10",
+	},
 ]
 
 /**

@@ -28,6 +28,18 @@ describe("registry", () => {
 		expect(a?.authorizer).toBeUndefined()
 	})
 
+	it("resolves the testnet EURCV-style test token (TLO) as a one-step permissioned asset", () => {
+		const a = resolveOfficialAsset("TLO", "TESTNET")
+		expect(a).not.toBeNull()
+		expect(a?.capability).toBe("permissionedOneStep")
+		expect(a?.sac).toBe(
+			"CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3",
+		)
+		expect(a?.authorizer).toBe(
+			"CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
+		)
+	})
+
 	it("keeps mainnet USDC distinct from testnet USDC", () => {
 		expect(resolveOfficialAsset("USDC", "PUBLIC")?.issuer).toBe(
 			MAINNET_USDC_ISSUER,

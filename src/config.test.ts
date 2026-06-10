@@ -48,6 +48,26 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSET.capability).toBe("open")
 	})
 
+	it("wires the EURCV-style test token (TLO) as a one-step permissioned asset on testnet", async () => {
+		vi.stubEnv("PUBLIC_ASSET_CODE", "TLO")
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Test SDF Network ; September 2015",
+		)
+		// Only the code is set — sac/authorizer/capability come from the pin.
+		const { ASSET } = await import("./config")
+		expect(ASSET.assetCode).toBe("TLO")
+		expect(ASSET.capability).toBe("permissionedOneStep")
+		expect(ASSET.sac).toBe(
+			"CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3",
+		)
+		expect(ASSET.authorizer).toBe(
+			"CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
+		)
+		const { ROUTERS } = await import("@theaha/authline")
+		expect(ASSET.router).toBe(ROUTERS.TESTNET)
+	})
+
 	it("prefers PUBLIC_ROUTER over the pinned router", async () => {
 		vi.stubEnv("PUBLIC_ASSET_CODE", "USDC")
 		vi.stubEnv("PUBLIC_ASSET_ISSUER", TESTNET_USDC_ISSUER)
