@@ -88,11 +88,11 @@ export function useActivation(args: UseActivationArgs) {
 				// successful response shape and exposes `returnValue`.
 				if (got.status !== rpc.Api.GetTransactionStatus.SUCCESS)
 					throw new Error(`activation failed: ${got.status}`)
-				// Surface TrustlineOnly so the embedding UI does not claim full
-				// activation for a line that still cannot receive the asset.
-				setTrustlineOnly(
-					decodeOnboardStatus(got.returnValue) === "TrustlineOnly",
-				)
+				// Only claim full activation when the chain explicitly reported
+				// Authorized; an absent/undecodable return value must NOT over-claim
+				// (this generic hook has no asset-capability hint to fall back on, so
+				// "unknown" is treated as trustline-only rather than authorized).
+				setTrustlineOnly(decodeOnboardStatus(got.returnValue) !== "Authorized")
 				setState("success")
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e))

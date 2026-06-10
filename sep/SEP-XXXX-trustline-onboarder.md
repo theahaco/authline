@@ -699,7 +699,7 @@ the Authorizer admin.
 
 ```
 Integrator (3rd party)              Holder                      Chain
-    │ GET <issuer>/.well-known/stellar.toml; assetAuthRequired() │
+    │ GET <issuer>/.well-known/stellar.toml; discover()          │
     │◄── [TRUSTLINE_ONBOARDER] ────────┤                           │
     │ build tx: invoke ONBOARD_WRAPPER.onboard(SAC, holder)
     │── SEP-7 URI / deep link ────────►│                           │

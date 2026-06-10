@@ -35,6 +35,7 @@ const config = await discoverOnboarder("theaha.co", { network: passphrase })
 import { buildOnboardTx, ROUTERS } from "@theaha/authline"
 import { Networks } from "@stellar/stellar-sdk"
 
+// Standalone testnet illustration (the discover() example above is mainnet EURCV).
 // The router id must be pinned per network; mainnet awaits the mainnet router deployment.
 const xdr = await buildOnboardTx({
 	rpcUrl: "https://soroban-testnet.stellar.org",

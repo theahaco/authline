@@ -20,7 +20,6 @@ import {
 	BASE_FEE,
 } from "@stellar/stellar-sdk"
 import {
-	assetAuthRequired,
 	getActivationStatus,
 	buildSponsoredOnboardTx,
 	onboardingRequest,
@@ -28,8 +27,10 @@ import {
 
 const NET = {
 	horizonUrl: "https://horizon-testnet.stellar.org",
+	rpcUrl: "https://soroban-testnet.stellar.org",
 	passphrase: Networks.TESTNET,
 }
+// Classic-submission transport for this demo (the SDK itself no longer uses Horizon).
 const horizon = new Horizon.Server(NET.horizonUrl)
 const sx = (s, n = 6) => `${s.slice(0, n)}…${s.slice(-n)}`
 const expertAcct = (a) => `https://stellar.expert/explorer/testnet/account/${a}`
@@ -72,19 +73,13 @@ async function main() {
 	console.log("• Funding issuer + exchange via friendbot…")
 	await Promise.all([fund(issuer.publicKey()), fund(exchange.publicKey())])
 
-	console.log("• Exchange classifies the asset before onboarding…")
-	const authReq = await assetAuthRequired({
-		horizonUrl: NET.horizonUrl,
-		assetIssuer: issuer.publicKey(),
-	})
+	// The open-vs-regulated distinction is now discovered on-chain by the router; the client no longer pre-classifies.
 	console.log(
-		"   assetAuthRequired:",
-		authReq,
-		"→ OPEN asset: NO authorize step, NO Authorizer contract.\n",
+		"• Open asset (issuer has no AUTH_REQUIRED) — NO authorize step, NO Authorizer contract.\n",
 	)
 
 	let st = await getActivationStatus({
-		horizonUrl: NET.horizonUrl,
+		rpcUrl: NET.rpcUrl,
 		account: user.publicKey(),
 		assetCode: CODE,
 		assetIssuer: issuer.publicKey(),
@@ -99,7 +94,7 @@ async function main() {
 		"• Establish the trustline — sponsored (exchange pays the reserve; user signs once).",
 	)
 	const xdr = await buildSponsoredOnboardTx({
-		horizonUrl: NET.horizonUrl,
+		rpcUrl: NET.rpcUrl,
 		networkPassphrase: NET.passphrase,
 		sponsor: exchange.publicKey(),
 		user: user.publicKey(),
@@ -146,7 +141,7 @@ async function main() {
 	console.log("   ✅ paid:", expertTx(r2.hash), "\n")
 
 	st = await getActivationStatus({
-		horizonUrl: NET.horizonUrl,
+		rpcUrl: NET.rpcUrl,
 		account: user.publicKey(),
 		assetCode: CODE,
 		assetIssuer: issuer.publicKey(),

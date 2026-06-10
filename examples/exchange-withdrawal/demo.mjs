@@ -39,6 +39,7 @@ const CONFIG = {
 	onboard: "CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5",
 	backends: ["cap73-one-signature", "cap33-sponsored"],
 }
+// Classic-submission transport for this demo (the SDK itself no longer uses Horizon).
 const horizon = new Horizon.Server(NET.horizonUrl)
 const server = new rpc.Server(NET.rpcUrl)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -85,7 +86,7 @@ async function main() {
 		"• User requests a withdrawal of TLO → exchange checks their trustline status…",
 	)
 	let st = await getActivationStatus({
-		horizonUrl: NET.horizonUrl,
+		rpcUrl: NET.rpcUrl,
 		account: user.publicKey(),
 		assetCode: CONFIG.assetCode,
 		assetIssuer: CONFIG.assetIssuer,
@@ -100,7 +101,7 @@ async function main() {
 		"• Step 1/2 — sponsored trustline creation (exchange pays the reserve; user signs once).",
 	)
 	const sponsoredXdr = await buildSponsoredOnboardTx({
-		horizonUrl: NET.horizonUrl,
+		rpcUrl: NET.rpcUrl,
 		networkPassphrase: NET.passphrase,
 		sponsor: exchange.publicKey(),
 		user: user.publicKey(),
@@ -173,7 +174,7 @@ async function main() {
 	)
 
 	st = await getActivationStatus({
-		horizonUrl: NET.horizonUrl,
+		rpcUrl: NET.rpcUrl,
 		account: user.publicKey(),
 		assetCode: CONFIG.assetCode,
 		assetIssuer: CONFIG.assetIssuer,

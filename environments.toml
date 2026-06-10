@@ -82,5 +82,6 @@ name = "official-team-account"
 default = true
 
 [production.contracts]
-# Keep this id in sync with PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID in the frontend .env.
+# Pre-pivot wrapper id (scaffold deploy target). The live dApp resolves the
+# discovery router from the SDK's pinned ROUTERS (packages/authline-sdk/src/registry.ts).
 trustline_onboard = { id = "CDH2Z3PMBEL2T3EBM3VW5ENDPURYUY7YIKX3XMU3TK5AP4P3LXMPAGLC" }
