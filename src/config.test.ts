@@ -29,6 +29,26 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSET.sac).toBe(TESTNET_USDC_SAC) // from the pinned registry entry
 		expect(ASSET.capability).toBe("open")
 		expect(ASSET.authorizer).toBe("")
+		// Router comes from the pinned registry when PUBLIC_ROUTER is unset.
+		const { ROUTERS } = await import("@theaha/authline")
+		expect(ASSET.router).toBe(ROUTERS.TESTNET)
 		expect(ASSETS[0]).toMatchObject({ code: "USDC", status: "live" })
+	})
+
+	it("prefers PUBLIC_ROUTER over the pinned router", async () => {
+		vi.stubEnv("PUBLIC_ASSET_CODE", "USDC")
+		vi.stubEnv("PUBLIC_ASSET_ISSUER", TESTNET_USDC_ISSUER)
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Test SDF Network ; September 2015",
+		)
+		vi.stubEnv(
+			"PUBLIC_ROUTER",
+			"CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
+		)
+		const { ASSET } = await import("./config")
+		expect(ASSET.router).toBe(
+			"CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
+		)
 	})
 })

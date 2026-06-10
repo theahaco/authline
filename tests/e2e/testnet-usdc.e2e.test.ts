@@ -6,8 +6,9 @@ import {
 	rpc,
 } from "@stellar/stellar-sdk"
 import {
-	buildTrustTx,
+	buildOnboardTx,
 	getActivationStatus,
+	ROUTERS,
 	type OnboarderConfig,
 } from "@theaha/authline"
 import { beforeAll, describe, expect, it } from "vitest"
@@ -22,6 +23,7 @@ const CONFIG: OnboarderConfig = {
 	assetCode: "USDC",
 	assetIssuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
 	sac: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+	router: process.env.PUBLIC_ROUTER ?? ROUTERS.TESTNET,
 	authorizer: "",
 	backends: ["cap73-one-signature"],
 }
@@ -44,7 +46,7 @@ describe.skipIf(!RUN)("testnet USDC trust (real chain)", () => {
 	}, 120_000)
 
 	it("creates an authorized USDC trustline via SAC.trust(holder)", async () => {
-		const xdr = await buildTrustTx({
+		const xdr = await buildOnboardTx({
 			rpcUrl: NET.rpcUrl,
 			networkPassphrase: NET.passphrase,
 			holder: holder.publicKey(),

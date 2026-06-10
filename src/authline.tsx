@@ -11,7 +11,6 @@ import {
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import {
 	buildOnboardTx,
-	buildTrustTx,
 	getActivationStatus,
 	isValidIssuer,
 } from "@theaha/authline"
@@ -84,9 +83,10 @@ async function signTx(xdr: string, address: string): Promise<string> {
 	return signedTxXdr
 }
 
-// Capability-aware copy: an OPEN asset (no authorizer) only needs its trustline
-// CREATED — there is no separate authorize step — so the UI must not promise one.
-const IS_OPEN = ASSET.capability === "open" || !ASSET.authorizer
+// Capability-aware copy: an OPEN asset only needs its trustline CREATED. The
+// transaction shape is identical either way (the router discovers capability
+// on-chain); this drives COPY only.
+const IS_OPEN = ASSET.capability === "open"
 const STATUS_PILL = IS_OPEN ? "Open" : "Auth req."
 const ERROR_HEADING = IS_OPEN
 	? "Couldn’t create trustline"
@@ -857,21 +857,13 @@ export function AuthlineApp() {
 		setErrMsg("")
 		setPhase("building")
 		try {
-			const xdr = IS_OPEN
-				? await buildTrustTx({
-						rpcUrl: NETWORK.rpcUrl,
-						networkPassphrase: NETWORK.passphrase,
-						holder: address,
-						config: ASSET,
-						allowHttp: NETWORK.allowHttp,
-					})
-				: await buildOnboardTx({
-						rpcUrl: NETWORK.rpcUrl,
-						networkPassphrase: NETWORK.passphrase,
-						holder: address,
-						config: ASSET,
-						allowHttp: NETWORK.allowHttp,
-					})
+			const xdr = await buildOnboardTx({
+				rpcUrl: NETWORK.rpcUrl,
+				networkPassphrase: NETWORK.passphrase,
+				holder: address,
+				config: ASSET,
+				allowHttp: NETWORK.allowHttp,
+			})
 			setPhase("signing")
 			const signedTxXdr = await signTx(xdr, address)
 			setPhase("submitting")
