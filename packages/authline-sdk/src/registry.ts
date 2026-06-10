@@ -137,7 +137,12 @@ OFFICIAL_ASSETS.forEach(validateOfficialAsset)
  * deployment task; PUBLIC is added when the mainnet router ships. Future:
  * resolve via the on-chain stellar-registry instead.
  */
-export const ROUTERS: Partial<Record<StellarNet, string>> = {}
+export const ROUTERS: Partial<Record<StellarNet, string>> = {
+	// Deployed from contracts/trustline-onboard @ 9925c31 (wasm hash
+	// ef08ae22467dd80bdb8c0017beb6c90964baacb8c6ab1fb673fb2bc765f206e9),
+	// verified on-chain 2026-06-10.
+	TESTNET: "CABVVUYHXS6UVN2VYYXKEUO2XEJIAGMTEYF2BOWGUUJVOO2IGPRWZAX4",
+}
 
 // Fail fast at module load if a pinned router id is malformed.
 Object.values(ROUTERS).forEach((id) => {
@@ -195,7 +200,9 @@ export interface ReconcilableConfig {
  * pinned value, or this throws — refusing to let a spoofed `stellar.toml`
  * redirect a trustline/authorize to attacker-controlled ids. When the code is
  * NOT curated there is nothing to pin against, so the config is returned
- * unchanged (callers should treat uncurated assets with extra caution).
+ * unchanged (callers should treat uncurated assets with extra caution) — EXCEPT
+ * the router: it is asset-independent (one pinned singleton per network), so an
+ * advertised router is checked against `ROUTERS` regardless of curation.
  *
  * Returns the same config on success so it can be used inline.
  */
@@ -203,8 +210,6 @@ export function reconcileWithRegistry<T extends ReconcilableConfig>(
 	config: T,
 	net: StellarNet,
 ): T {
-	const pinned = resolveOfficialAsset(config.assetCode, net)
-	if (!pinned) return config
 	const assertEq = (
 		field: string,
 		got: string | undefined,
@@ -216,9 +221,13 @@ export function reconcileWithRegistry<T extends ReconcilableConfig>(
 					`the pinned value ${want} — refusing a possibly-spoofed onboarder config`,
 			)
 	}
+	// Asset-independent: a spoofed advertised router is rejected even for
+	// asset codes the registry does not curate.
+	assertEq("router", config.router, ROUTERS[net])
+	const pinned = resolveOfficialAsset(config.assetCode, net)
+	if (!pinned) return config
 	assertEq("issuer", config.assetIssuer, pinned.issuer)
 	assertEq("SAC", config.sac, pinned.sac)
 	assertEq("authorizer", config.authorizer, pinned.authorizer)
-	assertEq("router", config.router, ROUTERS[net])
 	return config
 }

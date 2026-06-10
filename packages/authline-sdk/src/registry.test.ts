@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	OFFICIAL_ASSETS,
+	ROUTERS,
 	reconcileWithRegistry,
 	resolveOfficialAsset,
 	validateOfficialAsset,
@@ -57,5 +58,49 @@ describe("registry", () => {
 				"TESTNET",
 			),
 		).toThrow(/does not match the pinned value/)
+	})
+
+	it("pins a valid testnet router id", () => {
+		expect(ROUTERS.TESTNET).toMatch(/^C[A-Z2-7]{55}$/)
+	})
+
+	it("rejects a spoofed router for a curated code", () => {
+		expect(() =>
+			reconcileWithRegistry(
+				{
+					assetCode: "USDC",
+					assetIssuer: TESTNET_USDC_ISSUER,
+					sac: TESTNET_USDC_SAC,
+					router: TESTNET_USDC_SAC, // a C-address, but not the pinned router
+				},
+				"TESTNET",
+			),
+		).toThrow(/does not match the pinned value/)
+	})
+
+	it("rejects a spoofed router even for an UNCURATED code", () => {
+		// The router is asset-independent — the check must not be skipped by the
+		// uncurated-code early return.
+		expect(() =>
+			reconcileWithRegistry(
+				{
+					assetCode: "ZZZX",
+					assetIssuer: TESTNET_USDC_ISSUER,
+					sac: TESTNET_USDC_SAC,
+					router: TESTNET_USDC_SAC, // not the pinned router
+				},
+				"TESTNET",
+			),
+		).toThrow(/does not match the pinned value/)
+	})
+
+	it("accepts the pinned router and passes uncurated codes through", () => {
+		const cfg = {
+			assetCode: "ZZZX",
+			assetIssuer: TESTNET_USDC_ISSUER,
+			sac: TESTNET_USDC_SAC,
+			router: ROUTERS.TESTNET,
+		}
+		expect(reconcileWithRegistry(cfg, "TESTNET")).toBe(cfg)
 	})
 })
