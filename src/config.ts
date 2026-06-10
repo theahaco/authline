@@ -112,7 +112,7 @@ export const ASSET: AssetConfig = {
 // inside transaction building.
 if (!ASSET.router)
 	console.error(
-		`[config] no onboard router configured for ${NETWORK_LABEL} — ` +
+		`[config] no onboard router configured for network ${NET_TAG} — ` +
 			"set PUBLIC_ROUTER or pin it in the SDK's ROUTERS.",
 	)
 

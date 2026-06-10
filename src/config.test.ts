@@ -51,4 +51,19 @@ describe("config — testnet USDC (env-driven)", () => {
 			"CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
 		)
 	})
+
+	it("falls back to empty router and complains loudly when nothing is pinned", async () => {
+		vi.stubEnv("PUBLIC_ASSET_CODE", "EURCV")
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Public Global Stellar Network ; September 2015",
+		)
+		const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+		const { ASSET } = await import("./config")
+		expect(ASSET.router).toBe("")
+		expect(spy).toHaveBeenCalledWith(
+			expect.stringContaining("no onboard router configured"),
+		)
+		spy.mockRestore()
+	})
 })
