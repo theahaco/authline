@@ -68,6 +68,20 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSET.router).toBe(ROUTERS.TESTNET)
 	})
 
+	it("treats a blank PUBLIC_ROUTER as unset and still resolves the pinned router", async () => {
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Test SDF Network ; September 2015",
+		)
+		// A literal `PUBLIC_ROUTER=` in .env loads as "" — it must NOT defeat the
+		// pinned-ROUTERS fallback (the "Activation unavailable" footgun).
+		vi.stubEnv("PUBLIC_ROUTER", "")
+		const { ASSET } = await import("./config")
+		const { ROUTERS } = await import("@theaha/authline")
+		expect(ASSET.router).toBe(ROUTERS.TESTNET)
+		expect(ASSET.router).not.toBe("")
+	})
+
 	it("prefers PUBLIC_ROUTER over the pinned router", async () => {
 		vi.stubEnv("PUBLIC_ASSET_CODE", "USDC")
 		vi.stubEnv("PUBLIC_ASSET_ISSUER", TESTNET_USDC_ISSUER)
