@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "npm start",
+    "dev:testnet": "npm run build -w @theaha/authline && vite --mode testnet",
     "prestart": "npm run build -w @theaha/authline",
     "start": "concurrently --kill-others-on-fail --names stellar,vite -c gray,green --pad-prefix \"stellar scaffold watch --build-clients\" \"vite\"",
     "build": "npm run build -w @theaha/authline && tsc -b && vite build",
