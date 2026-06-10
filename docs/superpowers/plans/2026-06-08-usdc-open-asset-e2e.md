@@ -1,5 +1,12 @@
 # USDC Open-Asset (CAP-73 `trust`) Onboarding + E2E Tests — Implementation Plan
 
+> **Status:** SUPERSEDED by
+> `docs/superpowers/plans/2026-06-09-onboard-router-runtime-discovery.md` —
+> `buildTrustTx` and client-side `ASSET.capability` branching were replaced by
+> the single 2-arg router `onboard(sac, holder)` with on-chain capability
+> discovery. Retained as history; the e2e harness / registry / env work it
+> describes survives.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use

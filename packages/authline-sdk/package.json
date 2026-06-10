@@ -1,7 +1,7 @@
 {
   "name": "@theaha/authline",
-  "version": "0.2.0",
-  "description": "Integrator SDK for one-signature activation of AUTH_REQUIRED Stellar assets (Trustline Onboarder / SEP draft v0.2).",
+  "version": "0.3.0",
+  "description": "Integrator SDK for one-signature trustline onboarding via an on-chain discovery router (Trustline Onboarder / SEP draft v0.3).",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
