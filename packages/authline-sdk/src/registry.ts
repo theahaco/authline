@@ -130,6 +130,21 @@ export function validateOfficialAsset(a: OfficialAsset): void {
 // Fail fast at module load if any pinned entry is malformed.
 OFFICIAL_ASSETS.forEach(validateOfficialAsset)
 
+/**
+ * Pinned Authline onboard-router ids per network — the deploy-once, stateless
+ * singleton exposing `onboard(sac, holder)`. PINNED like the assets above
+ * (never resolved from an advertised source). TESTNET is filled by the
+ * deployment task; PUBLIC is added when the mainnet router ships. Future:
+ * resolve via the on-chain stellar-registry instead.
+ */
+export const ROUTERS: Partial<Record<StellarNet, string>> = {}
+
+// Fail fast at module load if a pinned router id is malformed.
+Object.values(ROUTERS).forEach((id) => {
+	if (!StrKey.isValidContract(id))
+		throw new Error(`registry: pinned router is not a valid C-address: ${id}`)
+})
+
 /** StrKey validators re-exposed so consumers can validate addresses without importing the base SDK. */
 export const isValidIssuer = (s: string): boolean =>
 	StrKey.isValidEd25519PublicKey(s)
@@ -169,6 +184,8 @@ export interface ReconcilableConfig {
 	assetIssuer: string
 	sac: string
 	authorizer?: string
+	/** Onboard router advertised by the issuer — must match the pinned ROUTERS id for the network when both exist. */
+	router?: string
 }
 
 /**
@@ -202,5 +219,6 @@ export function reconcileWithRegistry<T extends ReconcilableConfig>(
 	assertEq("issuer", config.assetIssuer, pinned.issuer)
 	assertEq("SAC", config.sac, pinned.sac)
 	assertEq("authorizer", config.authorizer, pinned.authorizer)
+	assertEq("router", config.router, ROUTERS[net])
 	return config
 }

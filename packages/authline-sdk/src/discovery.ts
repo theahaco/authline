@@ -36,8 +36,8 @@ export interface DiscoverOptions {
  * ASSET_CODE = "EURCV"
  * ASSET_ISSUER = "GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G"
  * SAC = "C..."
- * AUTHORIZER = "C..."          # Trustline Authorizer (SAC admin); regulated assets only
- * ONBOARD_WRAPPER = "C..."     # one-signature CAP-73 wrapper
+ * AUTHORIZER = "C..."          # informational (the router discovers the admin on-chain)
+ * ONBOARD_WRAPPER = "C..."     # the Authline onboard router
  * BACKENDS = ["cap73-onesig", "cap33-sponsored"]
  * ```
  *
@@ -83,8 +83,9 @@ export function parseOnboarderToml(toml: string): OnboarderConfig | null {
 	const assetIssuer = str(block, "ASSET_ISSUER")
 	const sac = str(block, "SAC")
 	const authorizer = str(block, "AUTHORIZER")
-	// SEP-1 §6 field is ONBOARD_WRAPPER; accept legacy ONBOARD as an alias.
-	const onboard = str(block, "ONBOARD_WRAPPER") || str(block, "ONBOARD")
+	// SEP §6 field is ONBOARD_WRAPPER (the onboard router); accept legacy
+	// ONBOARD as an alias.
+	const router = str(block, "ONBOARD_WRAPPER") || str(block, "ONBOARD")
 	const backends = arr(block, "BACKENDS")
 		.map(normalizeBackend)
 		.filter(isBackend)
@@ -109,17 +110,17 @@ export function parseOnboarderToml(toml: string): OnboarderConfig | null {
 		throw new Error(
 			`[TRUSTLINE_ONBOARDER]: AUTHORIZER is not a valid C-address: ${authorizer}`,
 		)
-	if (onboard && !StrKey.isValidContract(onboard))
+	if (router && !StrKey.isValidContract(router))
 		throw new Error(
-			`[TRUSTLINE_ONBOARDER]: ONBOARD_WRAPPER is not a valid C-address: ${onboard}`,
+			`[TRUSTLINE_ONBOARDER]: ONBOARD_WRAPPER is not a valid C-address: ${router}`,
 		)
 
 	return {
 		assetCode,
 		assetIssuer,
 		sac,
-		authorizer,
-		onboard: onboard || undefined,
+		authorizer: authorizer || undefined,
+		router: router || undefined,
 		backends: backends.length
 			? backends
 			: ["cap73-one-signature", "cap33-sponsored"],

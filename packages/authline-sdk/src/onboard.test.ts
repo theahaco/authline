@@ -4,10 +4,14 @@ import {
 	type Operation,
 	TransactionBuilder,
 } from "@stellar/stellar-sdk"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import type { OnboarderConfig } from "./index.js"
 
 const HOLDER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+const ISSUER = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
 const SAC = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+// Any valid C-address works for the router in this offline test.
+const ROUTER = "CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU"
 
 // Mock only the RPC server; keep the real builders/codecs.
 vi.mock("@stellar/stellar-sdk", async (importActual) => {
@@ -24,40 +28,49 @@ vi.mock("@stellar/stellar-sdk", async (importActual) => {
 	return { ...actual, rpc: { ...actual.rpc, Server: FakeServer } }
 })
 
+const config: OnboarderConfig = {
+	assetCode: "USDC",
+	assetIssuer: ISSUER,
+	sac: SAC,
+	router: ROUTER,
+	backends: ["cap73-one-signature"],
+}
 const opts = {
 	rpcUrl: "https://soroban-testnet.stellar.org",
 	networkPassphrase: Networks.TESTNET,
 	holder: HOLDER,
-	config: {
-		assetCode: "USDC",
-		assetIssuer: HOLDER,
-		sac: SAC,
-		authorizer: "",
-		backends: [] as const,
-	},
+	config,
 }
 
-describe("buildTrustTx", () => {
-	afterEach(() => vi.clearAllMocks())
-
-	it("builds a single SAC.trust(holder) invocation", async () => {
-		const { buildTrustTx } = await import("./onboard.js")
-		const xdr = await buildTrustTx({ ...opts, allowHttp: false })
+describe("buildOnboardTx (router)", () => {
+	it("builds a single router.onboard(sac, holder) invocation", async () => {
+		const { buildOnboardTx } = await import("./onboard.js")
+		const xdr = await buildOnboardTx({ ...opts, allowHttp: false })
 		const tx = TransactionBuilder.fromXDR(xdr, Networks.TESTNET)
 		expect(tx.operations).toHaveLength(1)
 		const op = tx.operations[0] as Operation.InvokeHostFunction
 		expect(op.type).toBe("invokeHostFunction")
 		const call = op.func.invokeContract()
-		expect(Address.fromScAddress(call.contractAddress()).toString()).toBe(SAC)
-		expect(call.functionName().toString()).toBe("trust")
-		expect(call.args()).toHaveLength(1)
-		expect(Address.fromScVal(call.args()[0]).toString()).toBe(HOLDER)
+		expect(Address.fromScAddress(call.contractAddress()).toString()).toBe(
+			ROUTER,
+		)
+		expect(call.functionName().toString()).toBe("onboard")
+		expect(call.args()).toHaveLength(2)
+		expect(Address.fromScVal(call.args()[0]).toString()).toBe(SAC)
+		expect(Address.fromScVal(call.args()[1]).toString()).toBe(HOLDER)
+	})
+
+	it("throws when config.router is missing", async () => {
+		const { buildOnboardTx } = await import("./onboard.js")
+		await expect(
+			buildOnboardTx({ ...opts, config: { ...config, router: "" } }),
+		).rejects.toThrow(/config.router is required/)
 	})
 
 	it("throws when config.sac is missing", async () => {
-		const { buildTrustTx } = await import("./onboard.js")
+		const { buildOnboardTx } = await import("./onboard.js")
 		await expect(
-			buildTrustTx({ ...opts, config: { ...opts.config, sac: "" } }),
+			buildOnboardTx({ ...opts, config: { ...config, sac: "" } }),
 		).rejects.toThrow(/config.sac is required/)
 	})
 })

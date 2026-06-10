@@ -39,6 +39,12 @@ export async function buildAuthorizeTx(opts: {
 	config: OnboarderConfig
 	allowHttp?: boolean
 }): Promise<string> {
+	if (!opts.config.authorizer) {
+		throw new Error(
+			"config.authorizer is required for authorize-on-behalf (Case A) — " +
+				"it is the asset's SAC admin",
+		)
+	}
 	const server = new rpc.Server(opts.rpcUrl, {
 		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
 	})
