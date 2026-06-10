@@ -64,4 +64,14 @@ describe("getActivationStatus (Stellar RPC, no Horizon)", () => {
 		stubLedgerEntries([])
 		await expect(status("http://rpc.evil.example")).rejects.toThrow(/insecure/)
 	})
+
+	it("treats a transient read error as not activated (optional pre-check)", async () => {
+		vi.spyOn(rpc.Server.prototype, "getLedgerEntries").mockRejectedValue(
+			new Error("rpc 503"),
+		)
+		await expect(status()).resolves.toEqual({
+			hasTrustline: false,
+			isAuthorized: false,
+		})
+	})
 })

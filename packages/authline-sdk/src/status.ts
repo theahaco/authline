@@ -17,10 +17,10 @@ const AUTHORIZED_FLAG = 1
  * Lets the UI short-circuit ("already activated") instead of prompting a
  * signature, and the e2e suites assert the post-onboard trustline state.
  *
- * A missing trustline (or an unfunded account that has none) reads as the
- * not-activated `{ false, false }`. A genuine RPC/transport error propagates so
- * a misconfigured endpoint fails loudly rather than masquerading as
- * "not activated".
+ * A missing trustline, an unfunded account, or a transient read error reads as
+ * the not-activated `{ false, false }`: this is an optional pre-check, and the
+ * activate() flow itself surfaces any real submit error. (A misconfigured
+ * insecure-http endpoint still throws at construction.)
  */
 export async function getActivationStatus(args: {
 	/** Stellar RPC URL — the same endpoint used to build and submit the onboard tx. */
@@ -40,12 +40,17 @@ export async function getActivationStatus(args: {
 			asset: new Asset(args.assetCode, args.assetIssuer).toTrustLineXDRObject(),
 		}),
 	)
-	const { entries } = await server.getLedgerEntries(key)
-	if (!entries || entries.length === 0)
+	try {
+		const { entries } = await server.getLedgerEntries(key)
+		if (!entries || entries.length === 0)
+			return { hasTrustline: false, isAuthorized: false }
+		const tl = entries[0].val.trustLine()
+		return {
+			hasTrustline: true,
+			isAuthorized: (tl.flags() & AUTHORIZED_FLAG) !== 0,
+		}
+	} catch {
+		// Unfunded/missing account or a transient read error → not yet activated.
 		return { hasTrustline: false, isAuthorized: false }
-	const tl = entries[0].val.trustLine()
-	return {
-		hasTrustline: true,
-		isAuthorized: (tl.flags() & AUTHORIZED_FLAG) !== 0,
 	}
 }
