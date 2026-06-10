@@ -14,7 +14,9 @@ export default defineConfig({
 		actionTimeout: 30_000,
 	},
 	webServer: {
-		command: `npm run build:e2e && npx vite preview --port ${PORT} --strictPort`,
+		// Builds the USDC app to dist/ and the regulated TLO app to dist/tlo/, then
+		// serves both from one preview: USDC at /app.html, TLO at /tlo/app.html.
+		command: `npm run build:e2e:tlo && npx vite preview --port ${PORT} --strictPort`,
 		url: `http://localhost:${PORT}/app.html`,
 		timeout: 240_000,
 		reuseExistingServer: !process.env.CI,
