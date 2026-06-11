@@ -1,14 +1,29 @@
 import {
 	StellarWalletsKit,
-	WalletNetwork,
-	allowAllModules,
-	FREIGHTER_ID,
-	XBULL_ID,
-	ALBEDO_ID,
-	LOBSTR_ID,
-	HANA_ID,
+	Networks as KitNetworks,
 } from "@creit.tech/stellar-wallets-kit"
-import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
+import {
+	AlbedoModule,
+	ALBEDO_ID,
+} from "@creit.tech/stellar-wallets-kit/modules/albedo"
+import {
+	FreighterModule,
+	FREIGHTER_ID,
+} from "@creit.tech/stellar-wallets-kit/modules/freighter"
+import {
+	HanaModule,
+	HANA_ID,
+} from "@creit.tech/stellar-wallets-kit/modules/hana"
+import {
+	LobstrModule,
+	LOBSTR_ID,
+} from "@creit.tech/stellar-wallets-kit/modules/lobstr"
+import {
+	xBullModule,
+	XBULL_ID,
+} from "@creit.tech/stellar-wallets-kit/modules/xbull"
+import { G2cModule, G2C_ID } from "@g2c/stellar-wallets-kit-module"
+import { Keypair, StrKey, rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import {
 	buildAuthorizeTx,
 	buildOnboardTx,
@@ -23,6 +38,7 @@ import {
 	ASSETS,
 	LIVE_ASSETS,
 	NETWORK,
+	NIDO_BASE,
 	REPO_URL,
 	type AssetConfig,
 	type DirItem,
@@ -52,21 +68,44 @@ const explorerBase = IS_PUBLIC
 	? "https://stellar.expert/explorer/public"
 	: "https://stellar.expert/explorer/testnet"
 const txUrl = (h: string) => `${explorerBase}/tx/${h}`
-const acctUrl = (a: string) => `${explorerBase}/account/${a}`
+const acctUrl = (a: string) =>
+	`${explorerBase}/${StrKey.isValidContract(a) ? "contract" : "account"}/${a}`
+/** Smart-account (C-address) holder — e.g. a Nido passkey wallet. */
+const isSmartAccount = (a: string) => StrKey.isValidContract(a)
 
-// Map the configured passphrase to the wallet kit's network. WalletNetwork's
+// Map the configured passphrase to the wallet kit's network. The Networks
 // enum values ARE the passphrases, so an exact match is correct for public /
 // testnet / futurenet / standalone — instead of collapsing every non-mainnet
 // network to TESTNET, which makes wallets reject the real-passphrase tx locally.
 const WALLET_NETWORK =
-	(Object.values(WalletNetwork).find((v) => v === NETWORK.passphrase) as
-		| WalletNetwork
-		| undefined) ?? WalletNetwork.TESTNET
+	(Object.values(KitNetworks).find((v) => v === NETWORK.passphrase) as
+		| KitNetworks
+		| undefined) ?? KitNetworks.TESTNET
 
-const kit = new StellarWalletsKit({
+// The Nido hosted wallet is TESTNET-ONLY today — register its module only
+// where its accounts can actually transact.
+const NIDO_AVAILABLE = NETWORK.passphrase === KitNetworks.TESTNET
+
+// Kit v2 is a static singleton: explicit module list (allowAllModules() was
+// removed), hardware/WalletConnect modules intentionally excluded as before.
+StellarWalletsKit.init({
 	network: WALLET_NETWORK,
 	selectedWalletId: FREIGHTER_ID,
-	modules: allowAllModules(),
+	modules: [
+		...(NIDO_AVAILABLE
+			? [
+					new G2cModule({
+						base: NIDO_BASE,
+						networkPassphrase: NETWORK.passphrase,
+					}),
+				]
+			: []),
+		new FreighterModule(),
+		new xBullModule(),
+		new AlbedoModule(),
+		new LobstrModule(),
+		new HanaModule(),
+	],
 })
 
 /**
@@ -87,7 +126,7 @@ const e2eSigner = (): E2ESigner | undefined =>
 async function signTx(xdr: string, address: string): Promise<string> {
 	const e2e = e2eSigner()
 	if (e2e) return (await e2e.signTransaction(xdr)).signedTxXdr
-	const { signedTxXdr } = await kit.signTransaction(xdr, {
+	const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
 		networkPassphrase: NETWORK.passphrase,
 		address,
 	})
@@ -406,6 +445,28 @@ function StatusRows({
 			</>
 		)
 	}
+	// Smart accounts (C-addresses) have no trustline concept — their balance +
+	// authorization live in the SAC's contract storage. Render that truthfully.
+	if (st.holderKind === "contract") {
+		return (
+			<>
+				<KV k="Holder" v="● Smart account" accent={AL.mut} mono={false} />
+				<KV k="Trustline" v="Not needed" accent={AL.mut} mono={false} />
+				<KV
+					k="SAC authorized"
+					v={
+						st.sacAuthorized === undefined
+							? "—"
+							: st.sacAuthorized
+								? "● Yes"
+								: "No"
+					}
+					accent={st.sacAuthorized ? AL.emeraldBright : undefined}
+					mono={false}
+				/>
+			</>
+		)
+	}
 	const trustline = st.hasTrustline
 		? st.isAuthorized
 			? { v: "● Active", c: AL.emeraldBright }
@@ -444,6 +505,11 @@ function StatusRows({
 
 // ── Wallet modal (wired to Stellar Wallets Kit) ──────────────────────
 const WALLETS: [string, string, string][] = [
+	// Nido is a hosted passkey smart wallet (testnet-only today) — its module
+	// is registered only on testnet, so the row is gated the same way.
+	...(NIDO_AVAILABLE
+		? ([["Nido", G2C_ID, "Passkey"]] as [string, string, string][])
+		: []),
 	["Freighter", FREIGHTER_ID, "Extension"],
 	["xBull", XBULL_ID, "Extension"],
 	["Albedo", ALBEDO_ID, "Web"],
@@ -869,12 +935,17 @@ const fetchStatus = (
 	})
 
 /** The truthful phase for a connected account's on-ledger state. */
-const phaseFor = (st: ActivationStatus, asset: AssetConfig): Phase =>
-	st.isAuthorized
+const phaseFor = (st: ActivationStatus, asset: AssetConfig): Phase => {
+	// Smart accounts have no trustline; the SAC view is the state. The
+	// authorize-only path is classic-tooling — the router onboard covers both.
+	if (st.holderKind === "contract")
+		return st.sacAuthorized ? "already" : "ready"
+	return st.isAuthorized
 		? "already"
 		: st.hasTrustline && canAuthorize(asset)
 			? "authorize"
 			: "ready"
+}
 
 /**
  * Whether the classic-flags part of a status read is trustworthy. The SDK
@@ -885,7 +956,9 @@ const phaseFor = (st: ActivationStatus, asset: AssetConfig): Phase =>
  * failed; the classic flags are still authoritative.)
  */
 const classicReadOk = (st: ActivationStatus): boolean =>
-	!st.readError || st.hasTrustline
+	st.holderKind === "contract"
+		? !st.readError // contracts: the SAC view is the only read — failed ⇒ unknown
+		: !st.readError || st.hasTrustline
 
 /**
  * Submit a signed tx and poll for confirmation. Bounded: a tx that never
@@ -949,12 +1022,25 @@ export function AuthlineApp() {
 	// Whether `address` came from a wallet connection (vs the read-only
 	// ?address= preview) — only a connected wallet may reach signing phases.
 	const isConnected = useRef(false)
+	// Smart-account activation needs a G fee payer (a contract cannot source a
+	// transaction). One ephemeral friendbot-funded key per SESSION (not per
+	// attempt — friendbot rate-limits, and stranding 10k test-XLM per retry is
+	// rude), plus a pre-built onboard tx: the Nido sign POPUP must open within
+	// the click's transient-user-activation window (~5s), so friendbot + RPC
+	// round-trips cannot run between click and window.open. The prep runs in
+	// the background when a smart account lands on "ready".
+	const smartFee = useRef<Keypair | null>(null)
+	const smartPrep = useRef<{
+		xdr: string
+		assetCode: string
+		holder: string
+		expiresAt: number
+	} | null>(null)
 	const [available, setAvailable] = useState<Set<string>>(new Set())
 	// wallet availability for the modal detection dots
 	useEffect(() => {
 		let cancelled = false
-		kit
-			.getSupportedWallets()
+		StellarWalletsKit.refreshSupportedWallets()
 			.then((ws) => {
 				if (!cancelled)
 					setAvailable(
@@ -971,7 +1057,7 @@ export function AuthlineApp() {
 	useEffect(() => {
 		let cancelled = false
 		const a = new URLSearchParams(window.location.search).get("address")
-		if (a && isValidIssuer(a)) {
+		if (a && (isValidIssuer(a) || StrKey.isValidContract(a))) {
 			const gen = statusGen.current
 			setAddress(a)
 			fetchStatus(a, asset)
@@ -979,7 +1065,15 @@ export function AuthlineApp() {
 					if (cancelled || gen !== statusGen.current) return
 					if (classicReadOk(st)) {
 						setStatus(st)
-						setPhase(st.isAuthorized ? "already" : "preview")
+						setPhase(
+							(
+								st.holderKind === "contract"
+									? st.sacAuthorized
+									: st.isAuthorized
+							)
+								? "already"
+								: "preview",
+						)
 					} else {
 						setPhase("preview") // status stays null → rendered as unknown
 					}
@@ -997,6 +1091,46 @@ export function AuthlineApp() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
+	// Background prep for smart-account activation: fund the session fee payer
+	// (once) and pre-build the onboard tx, so that when the user clicks
+	// Activate the Nido sign POPUP opens within the click's transient-user-
+	// activation window — friendbot + RPC round-trips after the click would
+	// get the popup blocked. Re-run whenever a smart account lands on "ready".
+	const prepareSmartActivation = useCallback(
+		async (holder: string, a: AssetConfig) => {
+			if (NETWORK.passphrase !== KitNetworks.TESTNET) return
+			try {
+				if (!smartFee.current) {
+					const kp = Keypair.random()
+					const fb = await fetch(
+						`https://friendbot.stellar.org/?addr=${kp.publicKey()}`,
+					)
+					if (!fb.ok) return
+					smartFee.current = kp
+				}
+				const xdr = await buildOnboardTx({
+					rpcUrl: NETWORK.rpcUrl,
+					networkPassphrase: NETWORK.passphrase,
+					holder,
+					feeSource: smartFee.current.publicKey(),
+					config: a,
+					allowHttp: NETWORK.allowHttp,
+				})
+				// Refresh well before the tx's own 180s timeout.
+				smartPrep.current = {
+					xdr,
+					assetCode: a.assetCode,
+					holder,
+					expiresAt: Date.now() + 120_000,
+				}
+			} catch {
+				// Best-effort: activate() falls back to building inline.
+				smartPrep.current = null
+			}
+		},
+		[],
+	)
+
 	const connect = useCallback(
 		async (id: string) => {
 			// New account context: invalidate any in-flight status read (a slow read
@@ -1010,8 +1144,14 @@ export function AuthlineApp() {
 				if (e2e) {
 					addr = e2e.address
 				} else {
-					kit.setWallet(id)
-					addr = (await kit.getAddress()).address
+					// Clear any previous module selection + per-module address cache
+					// (e.g. Nido's localStorage'd account) so reconnecting always asks
+					// the wallet — this is also the only way to switch Nido accounts.
+					await StellarWalletsKit.disconnect().catch(() => {})
+					StellarWalletsKit.setWallet(id)
+					// fetchAddress (not getAddress): pull from the wallet itself on a
+					// fresh connect rather than the kit's cached memory.
+					addr = (await StellarWalletsKit.fetchAddress()).address
 				}
 				if (gen !== statusGen.current) return
 				isConnected.current = true
@@ -1022,18 +1162,29 @@ export function AuthlineApp() {
 				if (classicReadOk(st)) {
 					setStatus(st)
 					setPhase(phaseFor(st, asset))
+					// Pre-build the smart-account activation so the eventual click
+					// opens the wallet popup within the user-activation window.
+					if (st.holderKind === "contract" && !st.sacAuthorized)
+						void prepareSmartActivation(addr, asset)
 				} else {
 					// Unknown ledger state: offer the normal activate flow (the router
 					// call is idempotent) instead of asserting "no trustline".
 					setPhase("ready")
+					if (isSmartAccount(addr)) void prepareSmartActivation(addr, asset)
 				}
 			} catch (e) {
 				if (gen !== statusGen.current) return
+				// The kit's selected module already switched — without a rollback,
+				// "Try again" would pair the PREVIOUS address with the NEW module
+				// (wrong-wallet signing). Clear the pairing instead.
+				isConnected.current = false
+				setAddress("")
+				setStatus(null)
 				setErrMsg(e instanceof Error ? e.message : String(e))
 				setPhase("error")
 			}
 		},
-		[asset],
+		[asset, prepareSmartActivation],
 	)
 
 	const pick = (t: DirItem) => {
@@ -1057,6 +1208,9 @@ export function AuthlineApp() {
 				if (gen !== statusGen.current || !classicReadOk(st)) return
 				setStatus(st)
 				setPhase(phaseFor(st, next))
+				// Pre-build the smart-account activation for the newly picked asset.
+				if (st.holderKind === "contract" && !st.sacAuthorized)
+					void prepareSmartActivation(address, next)
 			})
 			.catch(() => {})
 	}
@@ -1119,15 +1273,55 @@ export function AuthlineApp() {
 		setTrustlineOnly(false)
 		setPhase("building")
 		try {
-			const xdr = await buildOnboardTx({
-				rpcUrl: NETWORK.rpcUrl,
-				networkPassphrase: NETWORK.passphrase,
-				holder: address,
-				config: asset,
-				allowHttp: NETWORK.allowHttp,
-			})
+			// A smart-account holder (e.g. Nido) cannot source a transaction —
+			// a session fee payer covers the envelope (testnet friendbot) and the
+			// wallet signs the smart account's authorization entry instead.
+			let feePayer: Keypair | undefined
+			let xdr: string
+			const prep = smartPrep.current
+			if (isSmartAccount(address)) {
+				if (NETWORK.passphrase !== KitNetworks.TESTNET)
+					throw new Error(
+						"Smart-account activation is currently available on testnet only",
+					)
+				if (
+					prep &&
+					prep.holder === address &&
+					prep.assetCode === asset.assetCode &&
+					Date.now() < prep.expiresAt &&
+					smartFee.current
+				) {
+					// Fast path: pre-built — the sign popup opens almost immediately.
+					xdr = prep.xdr
+					feePayer = smartFee.current
+				} else {
+					// Slow path (prep missed/expired): the popup may be blocked by the
+					// browser; the wallet module's error tells the user to allow popups.
+					await prepareSmartActivation(address, asset)
+					if (!smartPrep.current || !smartFee.current)
+						throw new Error("Could not fund the fee account — try again")
+					xdr = smartPrep.current.xdr
+					feePayer = smartFee.current
+				}
+				smartPrep.current = null // single-use: seq number is consumed
+			} else {
+				xdr = await buildOnboardTx({
+					rpcUrl: NETWORK.rpcUrl,
+					networkPassphrase: NETWORK.passphrase,
+					holder: address,
+					config: asset,
+					allowHttp: NETWORK.allowHttp,
+				})
+			}
 			setPhase("signing")
-			const signedTxXdr = await signTx(xdr, address)
+			// For a smart account the wallet returns the tx with the holder's auth
+			// entry passkey-signed; the session fee payer then signs the envelope.
+			let signedTxXdr = await signTx(xdr, address)
+			if (feePayer) {
+				const tx = TransactionBuilder.fromXDR(signedTxXdr, NETWORK.passphrase)
+				tx.sign(feePayer)
+				signedTxXdr = tx.toXDR()
+			}
 			setPhase("submitting")
 			const { hash, returnValue } = await submitAndConfirm(signedTxXdr)
 			// The router reports the truthful outcome: Authorized, or
@@ -1136,6 +1330,14 @@ export function AuthlineApp() {
 			// capability so we never render the stronger "authorized" claim for an
 			// asset that may only be trustline-only.
 			const outcome = decodeOnboardStatus(returnValue)
+			// For a smart account, TrustlineOnly means NOTHING changed on-chain
+			// (CAP-73 trust() no-ops for contracts and no authorizer ran) — that is
+			// a truthful failure, not a success.
+			if (isSmartAccount(address) && outcome === "TrustlineOnly")
+				throw new Error(
+					`${asset.assetCode} has no on-chain authorizer — smart accounts ` +
+						"cannot be activated for it yet.",
+				)
 			setTrustlineOnly(outcome ? outcome === "TrustlineOnly" : !isOpen(asset))
 			await refreshStatus(address, asset)
 			setHash(hash)
@@ -1144,10 +1346,12 @@ export function AuthlineApp() {
 			// Refresh in the background: a timed-out tx may still land, and the
 			// error screen's Try-again/Cancel route from the stored status.
 			void refreshStatus(address, asset)
+			// Re-prep so a retry click reaches the popup fast again.
+			if (isSmartAccount(address)) void prepareSmartActivation(address, asset)
 			setErrMsg(e instanceof Error ? e.message : String(e))
 			setPhase("error")
 		}
-	}, [address, asset, refreshStatus])
+	}, [address, asset, refreshStatus, prepareSmartActivation])
 
 	// Direct authorize-only call for an existing unauthorized trustline: the
 	// asset's Authorizer contract (its SAC admin) runs authorize_trustline →
@@ -1380,7 +1584,13 @@ export function AuthlineApp() {
 						margin: "15px 0 16px",
 					}}
 				>
-					{isOpen(asset) ? (
+					{isSmartAccount(address) ? (
+						<>
+							One passkey approval authorizes your smart account for{" "}
+							{asset.assetCode} — no trustline, no reserve; a throwaway account
+							pays the network fee for you.
+						</>
+					) : isOpen(asset) ? (
 						<>
 							One signature runs{" "}
 							<span style={{ fontFamily: AL.mono, color: AL.ink }}>
@@ -1606,9 +1816,11 @@ export function AuthlineApp() {
 							letterSpacing: "-0.02em",
 						}}
 					>
-						{trustlineOnly
-							? `${asset.assetCode} trustline created`
-							: `${asset.assetCode} trustline authorized`}
+						{isSmartAccount(address)
+							? `${asset.assetCode} activated for your smart account`
+							: trustlineOnly
+								? `${asset.assetCode} trustline created`
+								: `${asset.assetCode} trustline authorized`}
 					</div>
 					<div
 						style={{
@@ -1767,16 +1979,20 @@ export function AuthlineApp() {
 					<Ghost full onClick={reset}>
 						Cancel
 					</Ghost>
-					{/* Retry the action that matches the ledger state: an existing
-					    unauthorized trustline retries the direct authorize call. */}
+					{/* Retry the action that matches the state: a failed CONNECT (no
+					    address — the pairing was cleared) re-opens the wallet picker;
+					    an existing unauthorized trustline retries the direct authorize
+					    call; everything else retries the activation. */}
 					<Primary
 						onClick={
-							status &&
-							status.hasTrustline &&
-							!status.isAuthorized &&
-							canAuthorize(asset)
-								? authorize
-								: activate
+							!address
+								? () => setShowModal(true)
+								: status &&
+									  status.hasTrustline &&
+									  !status.isAuthorized &&
+									  canAuthorize(asset)
+									? authorize
+									: activate
 						}
 					>
 						Try again

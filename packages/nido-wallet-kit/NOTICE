@@ -1,0 +1,8 @@
+@g2c/stellar-wallets-kit-module
+Copyright the theahaco/nido contributors.
+
+This package's src/ is synced verbatim from https://github.com/theahaco/nido
+(packages/stellar-wallets-kit-module) at the commit pinned in
+scripts/sync-nido-module.sh, and is licensed under the Apache License,
+Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). The full upstream
+license text is fetched alongside the source as LICENSE.upstream.

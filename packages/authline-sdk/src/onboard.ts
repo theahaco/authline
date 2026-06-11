@@ -2,6 +2,7 @@ import {
 	Address,
 	BASE_FEE,
 	Contract,
+	StrKey,
 	TransactionBuilder,
 	rpc,
 } from "@stellar/stellar-sdk"
@@ -26,8 +27,21 @@ export interface BuildOnboardOptions {
 	rpcUrl: string
 	/** Network passphrase (mainnet / testnet). */
 	networkPassphrase: string
-	/** The holder's account (G...), who signs the single resulting transaction. */
+	/**
+	 * The holder being onboarded. A classic G-account (default: also the tx
+	 * source and sole signer) or a CONTRACT address (smart account) — contracts
+	 * cannot source a transaction, so `feeSource` is then required and the
+	 * holder authorizes via its own SorobanAuthorizationEntry instead
+	 * (signed by the smart wallet, e.g. via the kit's signTransaction).
+	 */
 	holder: string
+	/**
+	 * Transaction source / fee payer. Defaults to `holder`. REQUIRED (a funded
+	 * G-account) when `holder` is a contract address; the resulting tx then
+	 * needs TWO signatures: the smart account's auth entry (wallet) and this
+	 * account's envelope signature.
+	 */
+	feeSource?: string
 	/** Resolved onboarder config. Must include `sac` and `router`. */
 	config: OnboarderConfig
 	allowHttp?: boolean
@@ -68,10 +82,17 @@ export async function buildOnboardTx(
 				"network (pin it via ROUTERS or your app's router config)",
 		)
 	}
+	const sourceId = opts.feeSource ?? opts.holder
+	if (StrKey.isValidContract(sourceId)) {
+		throw new Error(
+			"a contract address cannot source a transaction — pass a funded " +
+				"G-account as feeSource when onboarding a smart-account holder",
+		)
+	}
 	const server = new rpc.Server(opts.rpcUrl, {
 		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
 	})
-	const source = await server.getAccount(opts.holder)
+	const source = await server.getAccount(sourceId)
 
 	const router = new Contract(opts.config.router)
 	const op = router.call(

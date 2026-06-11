@@ -80,6 +80,7 @@ describe.skipIf(!RUN)("testnet USDC onboard via router (real chain)", () => {
 			assetIssuer: CONFIG.assetIssuer,
 		})
 		expect(st).toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: true,
 			isAuthorizedToMaintainLiabilities: false,

@@ -1,0 +1,25 @@
+{
+  "name": "@g2c/stellar-wallets-kit-module",
+  "version": "0.1.0-synced",
+  "private": true,
+  "description": "Nido (passkey smart wallet) module for @creit.tech/stellar-wallets-kit v2. Source is SYNCED from theahaco/nido at the commit pinned in scripts/sync-nido-module.sh (Apache-2.0, see LICENSE.upstream) — src/ and dist/ are gitignored; the sync script is the dependency.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "bash ../../scripts/sync-nido-module.sh",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@g2c/passkey-sdk": "*"
+  },
+  "peerDependencies": {
+    "@creit.tech/stellar-wallets-kit": "^2.0.0"
+  }
+}
