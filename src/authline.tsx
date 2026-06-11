@@ -18,7 +18,15 @@ import {
 	type ActivationStatus,
 } from "@theaha/authline"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ASSET, ASSETS, NETWORK, REPO_URL, type DirItem } from "./config.js"
+import {
+	ASSET as DEFAULT_ASSET,
+	ASSETS,
+	LIVE_ASSETS,
+	NETWORK,
+	REPO_URL,
+	type AssetConfig,
+	type DirItem,
+} from "./config.js"
 
 // ── Warm "paper" palette (AL) ────────────────────────────────────────
 const AL = {
@@ -89,19 +97,19 @@ async function signTx(xdr: string, address: string): Promise<string> {
 // Capability-aware copy: an OPEN asset only needs its trustline CREATED. The
 // transaction shape is identical either way (the router discovers capability
 // on-chain); this drives COPY only.
-// Assumes the live tile is never permissionedManual (no such registry entry exists); revisit the copy if one is added.
-const IS_OPEN = ASSET.capability === "open"
+// Assumes a live tile is never permissionedManual (no such registry entry exists); revisit the copy if one is added.
+const isOpen = (a: AssetConfig) => a.capability === "open"
 // No router id for this network (no pinned ROUTERS entry, no PUBLIC_ROUTER) —
-// activation cannot build a transaction, so the CTA must not promise one.
-const ROUTER_MISSING = !ASSET.router
+// activation cannot build a transaction, so the CTA must not promise one. The
+// router is a per-network singleton, so this holds for every live asset.
+const ROUTER_MISSING = !DEFAULT_ASSET.router
 // The asset's on-chain authorizer (its SAC admin) is known — for an existing
 // unauthorized trustline the dApp can offer the direct authorize-only call
 // (authorize_trustline → SAC set_authorized) instead of the full onboard.
-const CAN_AUTHORIZE = !!ASSET.authorizer
-const STATUS_PILL = IS_OPEN ? "Open" : "Auth req."
-const ERROR_HEADING = IS_OPEN
-	? "Couldn’t create trustline"
-	: "Couldn’t authorize"
+const canAuthorize = (a: AssetConfig) => !!a.authorizer
+const statusPill = (a: AssetConfig) => (isOpen(a) ? "Open" : "Auth req.")
+const errorHeading = (a: AssetConfig) =>
+	isOpen(a) ? "Couldn’t create trustline" : "Couldn’t authorize"
 
 type Phase =
 	| "directory"
@@ -378,7 +386,13 @@ function Divider() {
  * classic flag — for a G-account both reflect the same trustline flag, so a
  * divergence means the Soroban read failed to match the ledger.
  */
-function StatusRows({ st }: { st: ActivationStatus | null }) {
+function StatusRows({
+	st,
+	asset,
+}: {
+	st: ActivationStatus | null
+	asset: AssetConfig
+}) {
 	const amber = "#B7791F"
 	// null = the ledger read failed or hasn't happened — unknown, never "None".
 	if (!st) {
@@ -386,7 +400,7 @@ function StatusRows({ st }: { st: ActivationStatus | null }) {
 			<>
 				<KV k="Trustline" v="—" accent={AL.mut} mono={false} />
 				<KV k="Authorized" v="—" accent={AL.mut} mono={false} />
-				{ASSET.sac && (
+				{asset.sac && (
 					<KV k="SAC authorized" v="—" accent={AL.mut} mono={false} />
 				)}
 			</>
@@ -410,7 +424,7 @@ function StatusRows({ st }: { st: ActivationStatus | null }) {
 		<>
 			<KV k="Trustline" v={trustline.v} accent={trustline.c} mono={false} />
 			<KV k="Authorized" v={authorized.v} accent={authorized.c} mono={false} />
-			{ASSET.sac && (
+			{asset.sac && (
 				<KV
 					k="SAC authorized"
 					v={!sacKnown ? "—" : st.sacAuthorized ? "● Yes" : "No"}
@@ -649,7 +663,13 @@ function Progress({ state }: { state: Phase }) {
 	)
 }
 
-function AssetRow({ status }: { status: React.ReactNode }) {
+function AssetRow({
+	status,
+	asset,
+}: {
+	status: React.ReactNode
+	asset: AssetConfig
+}) {
 	return (
 		<div
 			style={{
@@ -659,7 +679,7 @@ function AssetRow({ status }: { status: React.ReactNode }) {
 				marginBottom: 18,
 			}}
 		>
-			<AssetGlyph label={ASSET.glyph} />
+			<AssetGlyph label={asset.glyph} />
 			<div style={{ lineHeight: 1.3, minWidth: 0 }}>
 				<div
 					style={{
@@ -669,7 +689,7 @@ function AssetRow({ status }: { status: React.ReactNode }) {
 						color: AL.ink,
 					}}
 				>
-					{ASSET.assetCode}
+					{asset.assetCode}
 				</div>
 				<div
 					style={{
@@ -681,9 +701,9 @@ function AssetRow({ status }: { status: React.ReactNode }) {
 						textOverflow: "ellipsis",
 					}}
 				>
-					{ASSET.name}
+					{asset.name}
 				</div>
-				{(ASSET.authClawback || ASSET.authRevocable) && (
+				{(asset.authClawback || asset.authRevocable) && (
 					<div
 						style={{
 							fontFamily: AL.disp,
@@ -696,7 +716,7 @@ function AssetRow({ status }: { status: React.ReactNode }) {
 						}}
 					>
 						<span aria-hidden>⚠</span>{" "}
-						{ASSET.authClawback
+						{asset.authClawback
 							? "Issuer can freeze or claw back this asset"
 							: "Issuer can freeze this asset"}
 					</div>
@@ -834,22 +854,25 @@ function Directory({ onPick }: { onPick: (a: DirItem) => void }) {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Read the full activation status (classic flags + SAC view) for an account. */
-const fetchStatus = (account: string): Promise<ActivationStatus> =>
+const fetchStatus = (
+	account: string,
+	asset: AssetConfig,
+): Promise<ActivationStatus> =>
 	getActivationStatus({
 		rpcUrl: NETWORK.rpcUrl,
 		allowHttp: NETWORK.allowHttp,
 		account,
-		assetCode: ASSET.assetCode,
-		assetIssuer: ASSET.assetIssuer,
-		sac: ASSET.sac || undefined,
+		assetCode: asset.assetCode,
+		assetIssuer: asset.assetIssuer,
+		sac: asset.sac || undefined,
 		networkPassphrase: NETWORK.passphrase,
 	})
 
 /** The truthful phase for a connected account's on-ledger state. */
-const phaseFor = (st: ActivationStatus): Phase =>
+const phaseFor = (st: ActivationStatus, asset: AssetConfig): Phase =>
 	st.isAuthorized
 		? "already"
-		: st.hasTrustline && CAN_AUTHORIZE
+		: st.hasTrustline && canAuthorize(asset)
 			? "authorize"
 			: "ready"
 
@@ -892,9 +915,23 @@ async function submitAndConfirm(signedTxXdr: string) {
 	return { hash: sent.hash, returnValue: got.returnValue }
 }
 
+/** Live asset preselected by a ?asset=CODE deep link, if any. */
+const preselectedAsset = (): AssetConfig | undefined => {
+	const q = new URLSearchParams(window.location.search).get("asset")
+	return LIVE_ASSETS.find((a) => a.assetCode === q)
+}
+
 export function AuthlineApp() {
 	const [address, setAddress] = useState("")
-	const [phase, setPhase] = useState<Phase>("directory")
+	// The asset being activated. Defaults to the env-configured asset; a
+	// ?asset=CODE deep link (landing page, partner docs) preselects any live
+	// asset and skips straight past the directory.
+	const [asset, setAsset] = useState<AssetConfig>(
+		() => preselectedAsset() ?? DEFAULT_ASSET,
+	)
+	const [phase, setPhase] = useState<Phase>(() =>
+		preselectedAsset() ? "idle" : "directory",
+	)
 	const [showModal, setShowModal] = useState(false)
 	const [hash, setHash] = useState<string | null>(null)
 	const [errMsg, setErrMsg] = useState("")
@@ -937,7 +974,7 @@ export function AuthlineApp() {
 		if (a && isValidIssuer(a)) {
 			const gen = statusGen.current
 			setAddress(a)
-			fetchStatus(a)
+			fetchStatus(a, asset)
 				.then((st) => {
 					if (cancelled || gen !== statusGen.current) return
 					if (classicReadOk(st)) {
@@ -954,64 +991,89 @@ export function AuthlineApp() {
 		return () => {
 			cancelled = true
 		}
+		// Mount-only by design: the preview reads the URL-selected (or default)
+		// asset once. Re-running on tile picks would clobber the picked phase
+		// with a stale ?address= preview.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
-	const connect = useCallback(async (id: string) => {
-		// New account context: invalidate any in-flight status read (a slow read
-		// for the previous address must not pair with the new one), and close the
-		// modal up front so a stalled wallet popup can't spawn a second connect.
+	const connect = useCallback(
+		async (id: string) => {
+			// New account context: invalidate any in-flight status read (a slow read
+			// for the previous address must not pair with the new one), and close the
+			// modal up front so a stalled wallet popup can't spawn a second connect.
+			const gen = ++statusGen.current
+			setShowModal(false)
+			try {
+				const e2e = e2eSigner()
+				let addr: string
+				if (e2e) {
+					addr = e2e.address
+				} else {
+					kit.setWallet(id)
+					addr = (await kit.getAddress()).address
+				}
+				if (gen !== statusGen.current) return
+				isConnected.current = true
+				setAddress(addr)
+				setStatus(null)
+				const st = await fetchStatus(addr, asset)
+				if (gen !== statusGen.current) return
+				if (classicReadOk(st)) {
+					setStatus(st)
+					setPhase(phaseFor(st, asset))
+				} else {
+					// Unknown ledger state: offer the normal activate flow (the router
+					// call is idempotent) instead of asserting "no trustline".
+					setPhase("ready")
+				}
+			} catch (e) {
+				if (gen !== statusGen.current) return
+				setErrMsg(e instanceof Error ? e.message : String(e))
+				setPhase("error")
+			}
+		},
+		[asset],
+	)
+
+	const pick = (t: DirItem) => {
+		if (t.status !== "live") return
+		const next = LIVE_ASSETS.find((a) => a.assetCode === t.code)
+		if (!next) return
+		// New asset context: the stored status belongs to the previous asset —
+		// invalidate in-flight reads and re-read for the selection.
 		const gen = ++statusGen.current
-		setShowModal(false)
-		try {
-			const e2e = e2eSigner()
-			let addr: string
-			if (e2e) {
-				addr = e2e.address
-			} else {
-				kit.setWallet(id)
-				addr = (await kit.getAddress()).address
-			}
-			if (gen !== statusGen.current) return
-			isConnected.current = true
-			setAddress(addr)
-			setStatus(null)
-			const st = await fetchStatus(addr)
-			if (gen !== statusGen.current) return
-			if (classicReadOk(st)) {
-				setStatus(st)
-				setPhase(phaseFor(st))
-			} else {
-				// Unknown ledger state: offer the normal activate flow (the router
-				// call is idempotent) instead of asserting "no trustline".
-				setPhase("ready")
-			}
-		} catch (e) {
-			if (gen !== statusGen.current) return
-			setErrMsg(e instanceof Error ? e.message : String(e))
-			setPhase("error")
-		}
-	}, [])
-
-	const pick = (a: DirItem) => {
-		if (a.status !== "live") return
+		setAsset(next)
+		setStatus(null)
 		// A ?address= preview address is NOT a connected wallet — it must go
 		// through the connect flow, not straight to signing-capable phases.
-		setPhase(
-			address && isConnected.current
-				? status
-					? phaseFor(status)
-					: "ready"
-				: "idle",
-		)
+		if (!(address && isConnected.current)) {
+			setPhase("idle")
+			return
+		}
+		setPhase("ready") // provisional while the per-asset status loads
+		fetchStatus(address, next)
+			.then((st) => {
+				if (gen !== statusGen.current || !classicReadOk(st)) return
+				setStatus(st)
+				setPhase(phaseFor(st, next))
+			})
+			.catch(() => {})
 	}
-	const back = () => {
-		statusGen.current++ // invalidate in-flight reads for the cleared address
-		isConnected.current = false
+	// Return to the asset directory WITHOUT dropping the wallet connection —
+	// only the per-asset flow state resets. pick() re-reads the connected
+	// wallet's status for whichever asset is chosen next, so switching assets
+	// never needs a page refresh.
+	const toDirectory = () => {
+		statusGen.current++ // invalidate in-flight reads for the cleared selection
 		setShowModal(false)
-		setAddress("")
 		setHash(null)
+		setErrMsg("")
 		setTrustlineOnly(false)
 		setStatus(null)
+		// Directory = no selection; a lingering deep-link/picked asset must not
+		// leak into the next selection's default.
+		setAsset(DEFAULT_ASSET)
 		setPhase("directory")
 	}
 	const reset = () => {
@@ -1020,7 +1082,9 @@ export function AuthlineApp() {
 		setTrustlineOnly(false)
 		// Decide from the latest ledger read (refreshed after every submit), so a
 		// freshly activated account lands on "already" — not the Activate CTA.
-		setPhase(address ? (status ? phaseFor(status) : "ready") : "directory")
+		setPhase(
+			address ? (status ? phaseFor(status, asset) : "ready") : "directory",
+		)
 	}
 
 	// Re-read the ledger after a submit so the stored status (and therefore
@@ -1029,10 +1093,13 @@ export function AuthlineApp() {
 	// (readError with no trustline visible) must not overwrite a good status —
 	// returning null tells the caller "unknown", not "not activated".
 	const refreshStatus = useCallback(
-		async (account: string): Promise<ActivationStatus | null> => {
+		async (
+			account: string,
+			a: AssetConfig,
+		): Promise<ActivationStatus | null> => {
 			const gen = statusGen.current
 			try {
-				const st = await fetchStatus(account)
+				const st = await fetchStatus(account, a)
 				if (gen !== statusGen.current || !classicReadOk(st)) return null
 				setStatus(st)
 				return st
@@ -1044,6 +1111,10 @@ export function AuthlineApp() {
 	)
 
 	const activate = useCallback(async () => {
+		// Invalidate any pending pick()-started status read: were it to resolve
+		// mid-transaction it would yank the phase out of busy, re-exposing the
+		// Activate button (double submit) and the back link while signing.
+		statusGen.current++
 		setErrMsg("")
 		setTrustlineOnly(false)
 		setPhase("building")
@@ -1052,7 +1123,7 @@ export function AuthlineApp() {
 				rpcUrl: NETWORK.rpcUrl,
 				networkPassphrase: NETWORK.passphrase,
 				holder: address,
-				config: ASSET,
+				config: asset,
 				allowHttp: NETWORK.allowHttp,
 			})
 			setPhase("signing")
@@ -1065,24 +1136,26 @@ export function AuthlineApp() {
 			// capability so we never render the stronger "authorized" claim for an
 			// asset that may only be trustline-only.
 			const outcome = decodeOnboardStatus(returnValue)
-			setTrustlineOnly(outcome ? outcome === "TrustlineOnly" : !IS_OPEN)
-			await refreshStatus(address)
+			setTrustlineOnly(outcome ? outcome === "TrustlineOnly" : !isOpen(asset))
+			await refreshStatus(address, asset)
 			setHash(hash)
 			setPhase("success")
 		} catch (e) {
 			// Refresh in the background: a timed-out tx may still land, and the
 			// error screen's Try-again/Cancel route from the stored status.
-			void refreshStatus(address)
+			void refreshStatus(address, asset)
 			setErrMsg(e instanceof Error ? e.message : String(e))
 			setPhase("error")
 		}
-	}, [address, refreshStatus])
+	}, [address, asset, refreshStatus])
 
 	// Direct authorize-only call for an existing unauthorized trustline: the
 	// asset's Authorizer contract (its SAC admin) runs authorize_trustline →
 	// SAC set_authorized. The connected wallet only pays the fee — authorization
 	// authority comes from the Authorizer being the SAC admin.
 	const authorize = useCallback(async () => {
+		// Same stale-read invalidation as activate() — see the comment there.
+		statusGen.current++
 		setErrMsg("")
 		setTrustlineOnly(false)
 		setPhase("building")
@@ -1092,7 +1165,7 @@ export function AuthlineApp() {
 				networkPassphrase: NETWORK.passphrase,
 				source: address,
 				account: address,
-				config: ASSET,
+				config: asset,
 				allowHttp: NETWORK.allowHttp,
 			})
 			setPhase("signing")
@@ -1100,18 +1173,18 @@ export function AuthlineApp() {
 			setPhase("submitting")
 			const { hash } = await submitAndConfirm(signedTxXdr)
 			// Truthful success copy: only claim "authorized" if the ledger agrees.
-			const st = await refreshStatus(address)
+			const st = await refreshStatus(address, asset)
 			setTrustlineOnly(st ? !st.isAuthorized : false)
 			setHash(hash)
 			setPhase("success")
 		} catch (e) {
 			// Refresh in the background: a timed-out tx may still land, and the
 			// error screen's Try-again/Cancel route from the stored status.
-			void refreshStatus(address)
+			void refreshStatus(address, asset)
 			setErrMsg(e instanceof Error ? e.message : String(e))
 			setPhase("error")
 		}
-	}, [address, refreshStatus])
+	}, [address, asset, refreshStatus])
 
 	const busy =
 		phase === "building" || phase === "signing" || phase === "submitting"
@@ -1122,23 +1195,10 @@ export function AuthlineApp() {
 	} else if (phase === "idle") {
 		body = (
 			<div className="al-fade">
-				<button
-					className="al-link"
-					onClick={back}
-					style={{
-						background: "none",
-						border: "none",
-						cursor: "pointer",
-						padding: 0,
-						marginBottom: 12,
-						fontFamily: AL.disp,
-						fontSize: 12.5,
-						color: AL.mut,
-					}}
-				>
-					‹ All assets
-				</button>
-				<AssetRow status={<Pill accent>{STATUS_PILL}</Pill>} />
+				<AssetRow
+					asset={asset}
+					status={<Pill accent>{statusPill(asset)}</Pill>}
+				/>
 				<Divider />
 				<p
 					style={{
@@ -1149,15 +1209,15 @@ export function AuthlineApp() {
 						margin: "2px 0 18px",
 					}}
 				>
-					{IS_OPEN ? (
+					{isOpen(asset) ? (
 						<>
-							Connect a wallet to create your {ASSET.assetCode} trustline in a
+							Connect a wallet to create your {asset.assetCode} trustline in a
 							single signature.
 						</>
 					) : (
 						<>
 							Connect a wallet to create <b style={{ color: AL.ink }}>and</b>{" "}
-							authorize your {ASSET.assetCode} trustline in a single signature.
+							authorize your {asset.assetCode} trustline in a single signature.
 						</>
 					)}
 				</p>
@@ -1259,6 +1319,7 @@ export function AuthlineApp() {
 					</div>
 				</div>
 				<AssetRow
+					asset={asset}
 					status={
 						<Pill tone="mut" accent={status?.hasTrustline}>
 							{status?.hasTrustline ? "Trustline" : "Not yet"}
@@ -1275,7 +1336,7 @@ export function AuthlineApp() {
 						borderBottom: `1px solid ${AL.line}`,
 					}}
 				>
-					<StatusRows st={status} />
+					<StatusRows st={status} asset={asset} />
 				</div>
 				<div style={{ marginTop: 18 }}>
 					<Primary onClick={() => setShowModal(true)}>
@@ -1287,7 +1348,10 @@ export function AuthlineApp() {
 	} else if (phase === "ready") {
 		body = (
 			<div className="al-fade">
-				<AssetRow status={<Pill accent>{STATUS_PILL}</Pill>} />
+				<AssetRow
+					asset={asset}
+					status={<Pill accent>{statusPill(asset)}</Pill>}
+				/>
 				<div
 					style={{
 						display: "flex",
@@ -1299,7 +1363,7 @@ export function AuthlineApp() {
 					}}
 				>
 					<KV k="Your account" v={short(address)} />
-					<KV k="Network" v={ASSET.networkLabel} mono={false} />
+					<KV k="Network" v={asset.networkLabel} mono={false} />
 					<KV
 						k="You sign"
 						v="1 transaction"
@@ -1316,13 +1380,13 @@ export function AuthlineApp() {
 						margin: "15px 0 16px",
 					}}
 				>
-					{IS_OPEN ? (
+					{isOpen(asset) ? (
 						<>
 							One signature runs{" "}
 							<span style={{ fontFamily: AL.mono, color: AL.ink }}>
 								trust()
 							</span>{" "}
-							(CAP-73) — your {ASSET.assetCode} trustline is created and usable
+							(CAP-73) — your {asset.assetCode} trustline is created and usable
 							immediately, with no separate authorize step.
 						</>
 					) : (
@@ -1365,7 +1429,7 @@ export function AuthlineApp() {
 						>
 							<path d="M3.5 8.5l3 3 6-7" />
 						</svg>
-						Activate {ASSET.assetCode} · 1 signature
+						Activate {asset.assetCode} · 1 signature
 					</Primary>
 				)}
 				<div
@@ -1384,7 +1448,7 @@ export function AuthlineApp() {
 	} else if (phase === "authorize") {
 		body = (
 			<div className="al-fade">
-				<AssetRow status={<Pill>Trustline only</Pill>} />
+				<AssetRow asset={asset} status={<Pill>Trustline only</Pill>} />
 				<div
 					style={{
 						display: "flex",
@@ -1396,7 +1460,7 @@ export function AuthlineApp() {
 					}}
 				>
 					<KV k="Your account" v={short(address)} />
-					<StatusRows st={status} />
+					<StatusRows st={status} asset={asset} />
 				</div>
 				<p
 					style={{
@@ -1407,7 +1471,7 @@ export function AuthlineApp() {
 						margin: "15px 0 16px",
 					}}
 				>
-					Your {ASSET.assetCode} trustline exists but isn’t authorized yet. One
+					Your {asset.assetCode} trustline exists but isn’t authorized yet. One
 					signature calls the issuer’s on-chain authorizer (
 					<span style={{ fontFamily: AL.mono, color: AL.ink }}>
 						authorize_trustline
@@ -1428,7 +1492,7 @@ export function AuthlineApp() {
 					>
 						<path d="M3.5 8.5l3 3 6-7" />
 					</svg>
-					Authorize {ASSET.assetCode} · 1 signature
+					Authorize {asset.assetCode} · 1 signature
 				</Primary>
 				<div
 					style={{
@@ -1451,7 +1515,7 @@ export function AuthlineApp() {
 		}
 		body = (
 			<div className="al-fade">
-				<AssetRow status={<Pill>Pending</Pill>} />
+				<AssetRow asset={asset} status={<Pill>Pending</Pill>} />
 				<Progress state={phase} />
 				<div
 					style={{
@@ -1543,8 +1607,8 @@ export function AuthlineApp() {
 						}}
 					>
 						{trustlineOnly
-							? `${ASSET.assetCode} trustline created`
-							: `${ASSET.assetCode} trustline authorized`}
+							? `${asset.assetCode} trustline created`
+							: `${asset.assetCode} trustline authorized`}
 					</div>
 					<div
 						style={{
@@ -1559,7 +1623,7 @@ export function AuthlineApp() {
 								Trustline created — the issuer authorizes holders off-platform.
 							</>
 						) : (
-							<>You’re ready to receive {ASSET.assetCode}.</>
+							<>You’re ready to receive {asset.assetCode}.</>
 						)}
 					</div>
 				</div>
@@ -1597,6 +1661,7 @@ export function AuthlineApp() {
 		body = (
 			<div className="al-fade">
 				<AssetRow
+					asset={asset}
 					status={
 						<Pill accent>
 							<svg
@@ -1626,7 +1691,7 @@ export function AuthlineApp() {
 					}}
 				>
 					<KV k="Your account" v={short(address)} />
-					<StatusRows st={status} />
+					<StatusRows st={status} asset={asset} />
 				</div>
 				<p
 					style={{
@@ -1638,7 +1703,7 @@ export function AuthlineApp() {
 					}}
 				>
 					You’re all set — this account can already hold and receive{" "}
-					{ASSET.assetCode}.
+					{asset.assetCode}.
 				</p>
 				<Ghost full href={acctUrl(address)}>
 					View on Explorer
@@ -1648,7 +1713,7 @@ export function AuthlineApp() {
 	} else if (phase === "error") {
 		body = (
 			<div className="al-fade">
-				<AssetRow status={<Pill tone="err">Failed</Pill>} />
+				<AssetRow asset={asset} status={<Pill tone="err">Failed</Pill>} />
 				<div
 					style={{
 						display: "flex",
@@ -1682,7 +1747,7 @@ export function AuthlineApp() {
 								color: AL.ink,
 							}}
 						>
-							{ERROR_HEADING}
+							{errorHeading(asset)}
 						</div>
 						<div
 							style={{
@@ -1709,7 +1774,7 @@ export function AuthlineApp() {
 							status &&
 							status.hasTrustline &&
 							!status.isAuthorized &&
-							CAN_AUTHORIZE
+							canAuthorize(asset)
 								? authorize
 								: activate
 						}
@@ -1721,17 +1786,22 @@ export function AuthlineApp() {
 		)
 	}
 
-	const connected =
-		!!address && !["idle", "preview", "directory"].includes(phase)
+	// The wallet stays connected across "‹ All assets" — the header pill must
+	// keep showing it in the directory, not pretend the user disconnected.
+	const connected = !!address && isConnected.current
 	const head =
 		phase === "directory"
 			? {
 					t: "Activate a Stellar asset",
-					s: `One signature to hold any supported asset — ${ASSET.assetCode} is live now, more onboarding soon.`,
+					s: `One signature to hold any supported asset — ${
+						LIVE_ASSETS.length === 1
+							? `${LIVE_ASSETS[0]?.assetCode} is`
+							: `${LIVE_ASSETS.length} are`
+					} live now, more onboarding soon.`,
 				}
 			: {
-					t: `Activate ${ASSET.assetCode}`,
-					s: `Receive ${ASSET.name} in one signature.`,
+					t: `Activate ${asset.assetCode}`,
+					s: `Receive ${asset.name} in one signature.`,
 				}
 
 	return (
@@ -1868,7 +1938,30 @@ export function AuthlineApp() {
 						{head.s}
 					</p>
 				</div>
-				<Card>{body}</Card>
+				<Card>
+					{/* Always reachable way back to the asset list (wallet connection
+					    kept) — except mid-flight, where abandoning a signing/submitting
+					    transaction would mislead. */}
+					{phase !== "directory" && !busy && (
+						<button
+							className="al-link"
+							onClick={toDirectory}
+							style={{
+								background: "none",
+								border: "none",
+								cursor: "pointer",
+								padding: 0,
+								marginBottom: 12,
+								fontFamily: AL.disp,
+								fontSize: 12.5,
+								color: AL.mut,
+							}}
+						>
+							‹ All assets
+						</button>
+					)}
+					{body}
+				</Card>
 				<div
 					style={{
 						fontFamily: AL.mono,

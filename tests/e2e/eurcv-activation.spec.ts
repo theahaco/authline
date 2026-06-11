@@ -80,7 +80,7 @@ test("activate an AUTH_REQUIRED (EURCV) trustline through the dApp via one-step 
 	await installSigner(page, holder)
 
 	await page.goto("/eurcv/app.html")
-	await page.getByRole("button", { name: /EURCV/ }).first().click()
+	await page.getByRole("button", { name: /^EV EURCV / }).click()
 	await page.getByRole("button", { name: /Connect wallet/i }).click()
 	await page
 		.getByRole("button", { name: /Activate EURCV · 1 signature/ })
@@ -99,7 +99,7 @@ test("detect an existing UNauthorized trustline and authorize it from the UI", a
 	await installSigner(page, holder)
 
 	await page.goto("/eurcv/app.html")
-	await page.getByRole("button", { name: /EURCV/ }).first().click()
+	await page.getByRole("button", { name: /^EV EURCV / }).click()
 	await page.getByRole("button", { name: /Connect wallet/i }).click()
 	// Ledger-state detection: trustline exists but unauthorized → the dApp must
 	// offer the direct authorize-only call, NOT the full Activate flow.

@@ -86,6 +86,25 @@ export const OFFICIAL_ASSETS: OfficialAsset[] = [
 		verifiedAt: "2026-06-04",
 	},
 	{
+		// Blend Capital's BLND — issuer verified via Blend docs + StellarExpert
+		// (115k+ trustlines vs 17 for the nearest copycat, ~7,000x; open flags);
+		// SAC re-derived with Asset.contractId(PUBLIC) and probed live on
+		// mainnet RPC (name() simulation), 2026-06-11. NOTE: homeDomain below is
+		// the issuer's known project domain for display — the issuer account has
+		// no on-chain home_domain and blend.capital serves no stellar.toml, so
+		// unlike the Circle pins it is not on-chain/SEP-1 verifiable.
+		code: "BLND",
+		issuer: "GDJEHTBE6ZHUXSWFI642DCGLUOECLHPF3KSXHPXTSTJ7E3JF6MQ5EZYY",
+		sac: "CD25MNVTZDL4Y3XBCPCJXGXATV5WUHHOWMYFF4YBEGU5FCPGMYTVG5JY",
+		capability: "open",
+		name: "Blend",
+		network: "PUBLIC",
+		homeDomain: "blend.capital",
+		authRevocable: false,
+		authClawback: false,
+		verifiedAt: "2026-06-11",
+	},
+	{
 		// Testnet entry: issuer + flags verified via Horizon (2026-06-08); the SAC
 		// is the deterministic `Asset.contractId(TESTNET)` id (same derivation that
 		// reproduces every pinned mainnet SAC), deployed on testnet. Testnet has no
@@ -137,6 +156,40 @@ export const OFFICIAL_ASSETS: OfficialAsset[] = [
 		name: "EUR CoinVertible (testnet test token)",
 		network: "TESTNET",
 		authRevocable: true,
+		authClawback: false,
+		verifiedAt: "2026-06-11",
+	},
+	{
+		// Circle's OFFICIAL testnet EURC (same process as the testnet USDC pin):
+		// issuer verified via Horizon — dominant by 10x (1758 authorized
+		// trustlines), on-chain home_domain circle.com — and listed in Circle's
+		// EURC contract-addresses docs. Open flags (matches mainnet EURC's
+		// capability; unlike mainnet, testnet EURC is not auth_revocable). SAC
+		// re-derived with Asset.contractId(TESTNET) and probed live (2026-06-11).
+		code: "EURC",
+		issuer: "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO",
+		sac: "CCUUDM434BMZMYWYDITHFXHDMIVTGGD6T2I5UKNX5BSLXLW7HVR4MCGZ",
+		capability: "open",
+		name: "Euro Coin",
+		network: "TESTNET",
+		homeDomain: "circle.com",
+		authRevocable: false,
+		authClawback: false,
+		verifiedAt: "2026-06-11",
+	},
+	{
+		// Testnet BLND test token (OPEN — no auth flags, no authorizer), issued
+		// by scripts/issue-test-asset.sh with REGULATED=0: exercises the open
+		// one-step path. Issuer flags verified via Horizon, SAC deployed and the
+		// derived Asset.contractId(TESTNET) matches (2026-06-11). The real BLND
+		// is the mainnet pin above.
+		code: "BLND",
+		issuer: "GCZLTPB2YA4G2OWOBZ4XUS7TUXLBSCGXPZ5AL3W2UFDQ7RD7WJMG4EDT",
+		sac: "CDJOMK2UQX5TTFBMHSYGIHB4LSNZ4VECABT2PM3DH3TXQ4NQAWILR3ZU",
+		capability: "open",
+		name: "Blend (testnet test token)",
+		network: "TESTNET",
+		authRevocable: false,
 		authClawback: false,
 		verifiedAt: "2026-06-11",
 	},

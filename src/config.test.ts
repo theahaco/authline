@@ -35,6 +35,59 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSETS[0]).toMatchObject({ code: "USDC", status: "live" })
 	})
 
+	it("exposes every registry-pinned testnet asset as LIVE with no env at all (hosted-build config)", async () => {
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Test SDF Network ; September 2015",
+		)
+		// The hosted Pages build sets no PUBLIC_ASSET_* env: the directory must
+		// still offer every pinned asset — EURCV must NOT render as "soon".
+		const { ASSET, ASSETS, LIVE_ASSETS } = await import("./config")
+		const liveCodes = LIVE_ASSETS.map((a) => a.assetCode)
+		expect(liveCodes).toContain("USDC")
+		expect(liveCodes).toContain("TLO")
+		expect(liveCodes).toContain("EURCV")
+		expect(liveCodes).toContain("EURC")
+		expect(liveCodes).toContain("BLND")
+		// EURC went live → it must no longer appear as a roadmap "soon" tile.
+		expect(
+			ASSETS.filter((t) => t.code === "EURC").map((t) => t.status),
+		).toEqual(["live"])
+		// The env/default asset stays the default selection (first).
+		expect(LIVE_ASSETS[0]).toBe(ASSET)
+		const eurcvTile = ASSETS.find((t) => t.code === "EURCV")
+		expect(eurcvTile?.status).toBe("live")
+		// EURC and EURCV must not share a glyph (both are "EU" by prefix).
+		expect(eurcvTile?.glyph).toBe("EV")
+		expect(ASSETS.find((t) => t.code === "EURC")?.glyph).toBe("EC")
+		// A live pinned asset is fully wired straight from the registry.
+		const eurcv = LIVE_ASSETS.find((a) => a.assetCode === "EURCV")
+		expect(eurcv?.assetIssuer).toBe(
+			"GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
+		)
+		expect(eurcv?.sac).toBe(
+			"CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
+		)
+		expect(eurcv?.authorizer).toBe(
+			"CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+		)
+		expect(eurcv?.capability).toBe("permissionedOneStep")
+		const { ROUTERS } = await import("@theaha/authline")
+		expect(eurcv?.router).toBe(ROUTERS.TESTNET)
+	})
+
+	it("dedupes LIVE_ASSETS when the env-configured asset is also pinned", async () => {
+		vi.stubEnv("PUBLIC_ASSET_CODE", "EURCV")
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Test SDF Network ; September 2015",
+		)
+		const { ASSETS, LIVE_ASSETS } = await import("./config")
+		expect(LIVE_ASSETS[0]?.assetCode).toBe("EURCV")
+		expect(LIVE_ASSETS.filter((a) => a.assetCode === "EURCV")).toHaveLength(1)
+		expect(ASSETS.filter((t) => t.code === "EURCV")).toHaveLength(1)
+	})
+
 	it("defaults to the testnet test token (USDC) when PUBLIC_ASSET_CODE is unset on testnet", async () => {
 		vi.stubEnv(
 			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
