@@ -1,4 +1,4 @@
-import { scValToNative, xdr } from "@stellar/stellar-sdk"
+import { scValToNative, type xdr } from "@stellar/stellar-sdk"
 
 /** The router's `OnboardStatus` discriminant (see the trustline-onboard contract). */
 export type OnboardStatusTag = "Authorized" | "TrustlineOnly"

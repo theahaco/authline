@@ -4,8 +4,9 @@ import {
 	type Operation,
 	TransactionBuilder,
 } from "@stellar/stellar-sdk"
+import type * as stellarSdk from "@stellar/stellar-sdk"
 import { describe, expect, it, vi } from "vitest"
-import type { OnboarderConfig } from "./index.js"
+import { type OnboarderConfig } from "./index.js"
 
 const HOLDER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
 const ISSUER = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
@@ -15,7 +16,7 @@ const ROUTER = "CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU"
 
 // Mock only the RPC server; keep the real builders/codecs.
 vi.mock("@stellar/stellar-sdk", async (importActual) => {
-	const actual = await importActual<typeof import("@stellar/stellar-sdk")>()
+	const actual = await importActual<typeof stellarSdk>()
 	class FakeServer {
 		async getAccount(id: string) {
 			return new actual.Account(id, "0")

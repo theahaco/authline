@@ -1,10 +1,10 @@
 import { StrKey } from "@stellar/stellar-sdk"
-import { type Backend, type OnboarderConfig } from "./index.js"
 import {
 	netFromPassphrase,
 	reconcileWithRegistry,
 	type StellarNet,
 } from "./registry.js"
+import { type Backend, type OnboarderConfig } from "./index.js"
 
 /** Reject anything that is not a bare hostname[:port] (no scheme/path/userinfo). */
 const HOSTNAME_RE = /^[a-z0-9.-]+(:\d+)?$/i

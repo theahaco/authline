@@ -6,7 +6,12 @@ import globals from "globals"
 export default [
 	globalIgnores([
 		"dist",
-		"packages",
+		// Generated contract-client packages stay ignored, but the hand-written
+		// authline SDK is first-class source and must be linted (its build
+		// output is not).
+		"packages/*",
+		"!packages/authline-sdk",
+		"packages/authline-sdk/dist",
 		"target/packages",
 		"src/contracts/*",
 		"!src/contracts/util.ts",

@@ -1,7 +1,7 @@
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import { useCallback, useState } from "react"
-import { buildOnboardTx, defaultAllowHttp } from "./onboard.js"
 import { decodeOnboardStatus } from "./onboard-status.js"
+import { buildOnboardTx, defaultAllowHttp } from "./onboard.js"
 import { type OnboarderConfig } from "./index.js"
 
 export type ActivationState =
