@@ -14,9 +14,11 @@ export default defineConfig({
 		actionTimeout: 30_000,
 	},
 	webServer: {
-		// Builds the USDC app to dist/ and the regulated TLO app to dist/tlo/, then
-		// serves both from one preview: USDC at /app.html, TLO at /tlo/app.html.
-		command: `npm run build:e2e:tlo && npx vite preview --port ${PORT} --strictPort`,
+		// Builds the USDC app to dist/, the regulated TLO app to dist/tlo/, and the
+		// regulated EURCV app to dist/eurcv/, then serves all from one preview:
+		// /app.html, /tlo/app.html, /eurcv/app.html. The EURCV build reuses the SDK
+		// + base dist produced by build:e2e:tlo, so it runs vite directly.
+		command: `npm run build:e2e:tlo && npx vite build --mode e2e-eurcv --outDir dist/eurcv && npx vite preview --port ${PORT} --strictPort`,
 		url: `http://localhost:${PORT}/app.html`,
 		timeout: 240_000,
 		reuseExistingServer: !process.env.CI,

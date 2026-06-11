@@ -94,12 +94,15 @@ cat <<EOF
 ==========================================================================
 Done. Paste these into .env (overwriting any prior test-asset values):
 
-PUBLIC_TEST_ASSET_CODE="$ASSET_CODE"
-PUBLIC_TEST_ASSET_ISSUER="$SOURCE_ADDR"
-PUBLIC_TEST_SAC="$SAC"
-PUBLIC_EURCV_AUTH_CONTRACT_ID="$STUB"
+PUBLIC_ASSET_CODE="$ASSET_CODE"
+PUBLIC_ASSET_ISSUER="$SOURCE_ADDR"
+PUBLIC_SAC="$SAC"
+PUBLIC_AUTHORIZER="$STUB"
+PUBLIC_ASSET_REVOCABLE="true"
 
-(PUBLIC_TRUSTLINE_ONBOARD_CONTRACT_ID stays whatever you already deployed.)
+(PUBLIC_ROUTER stays unset — the pinned ROUTERS entry covers testnet. To make
+the asset resolvable by PUBLIC_ASSET_CODE alone, pin it in
+packages/authline-sdk/src/registry.ts instead.)
 
 Explorer: https://stellar.expert/explorer/testnet/contract/$STUB
 ==========================================================================

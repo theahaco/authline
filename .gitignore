@@ -30,6 +30,7 @@ lerna-debug.log*
 !.env.example
 !.env.e2e
 !.env.e2e-tlo
+!.env.e2e-eurcv
 !.env.testnet
 
 # easy way to create temporary local-only files and folders

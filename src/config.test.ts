@@ -68,6 +68,29 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSET.router).toBe(ROUTERS.TESTNET)
 	})
 
+	it("wires the testnet EURCV test token by code alone (pinned issuer wins over the mainnet default)", async () => {
+		vi.stubEnv("PUBLIC_ASSET_CODE", "EURCV")
+		vi.stubEnv(
+			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+			"Test SDF Network ; September 2015",
+		)
+		// Only the code is set — the pinned TESTNET issuer must win over the
+		// hardcoded mainnet-EURCV fallback issuer.
+		const { ASSET } = await import("./config")
+		expect(ASSET.assetCode).toBe("EURCV")
+		expect(ASSET.assetIssuer).toBe(
+			"GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
+		)
+		expect(ASSET.sac).toBe(
+			"CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
+		)
+		expect(ASSET.authorizer).toBe(
+			"CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+		)
+		expect(ASSET.capability).toBe("permissionedOneStep")
+		expect(ASSET.authRevocable).toBe(true)
+	})
+
 	it("treats a blank PUBLIC_ROUTER as unset and still resolves the pinned router", async () => {
 		vi.stubEnv(
 			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",

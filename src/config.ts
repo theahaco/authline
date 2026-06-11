@@ -100,8 +100,12 @@ export interface AssetConfig extends OnboarderConfig {
 
 export const ASSET: AssetConfig = {
 	assetCode: CODE,
+	// Prefer the registry-pinned issuer for the resolved (code, network) — the
+	// hardcoded mainnet EURCV issuer is only the last-resort default and must
+	// never shadow a pinned testnet entry of the same code.
 	assetIssuer:
 		env(import.meta.env.PUBLIC_ASSET_ISSUER) ??
+		pinned?.issuer ??
 		"GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G",
 	sac: env(import.meta.env.PUBLIC_SAC) ?? pinned?.sac ?? "",
 	authorizer:

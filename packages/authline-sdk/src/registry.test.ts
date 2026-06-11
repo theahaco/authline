@@ -40,6 +40,24 @@ describe("registry", () => {
 		)
 	})
 
+	it("resolves the testnet EURCV test token distinctly from mainnet EURCV", () => {
+		const t = resolveOfficialAsset("EURCV", "TESTNET")
+		expect(t).not.toBeNull()
+		expect(t?.capability).toBe("permissionedOneStep")
+		expect(t?.issuer).toBe(
+			"GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
+		)
+		expect(t?.sac).toBe(
+			"CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
+		)
+		expect(t?.authorizer).toBe(
+			"CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+		)
+		// Unlike mainnet EURCV: a different issuer and no clawback.
+		expect(t?.issuer).not.toBe(resolveOfficialAsset("EURCV", "PUBLIC")?.issuer)
+		expect(t?.authClawback).toBe(false)
+	})
+
 	it("keeps mainnet USDC distinct from testnet USDC", () => {
 		expect(resolveOfficialAsset("USDC", "PUBLIC")?.issuer).toBe(
 			MAINNET_USDC_ISSUER,
