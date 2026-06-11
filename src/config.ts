@@ -262,3 +262,10 @@ export const ASSETS: DirItem[] = [
 ]
 
 export const REPO_URL = "https://github.com/theahaco/stellar-assets"
+
+/**
+ * Base domain of the Nido hosted passkey wallet (theahaco/nido). The wallets-
+ * kit module derives `<base>/connect/` and `<account>.<base>/sign/` from it.
+ * Nido is testnet-only today; the dApp registers its module only on testnet.
+ */
+export const NIDO_BASE = env(import.meta.env.PUBLIC_NIDO_BASE) ?? "nido.fyi"

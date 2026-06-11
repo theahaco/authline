@@ -77,6 +77,7 @@ describe.skipIf(!RUN)("testnet TLO discovery onboard (real chain)", () => {
 			assetIssuer: CONFIG.assetIssuer,
 		})
 		expect(st).toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: true,
 			isAuthorizedToMaintainLiabilities: false,

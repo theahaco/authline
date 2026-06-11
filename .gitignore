@@ -45,6 +45,17 @@ packages/*
 # hand-authored, first-class SDK (not a generated client)
 !packages/authline-sdk
 !packages/authline-sdk/**
+# Nido wallet-kit module wrapper: manifest committed, src synced from
+# theahaco/nido by scripts/sync-nido-module.sh (the script IS the dependency)
+!packages/nido-wallet-kit
+!packages/nido-wallet-kit/**
+packages/nido-wallet-kit/src
+packages/nido-wallet-kit/dist
+packages/nido-wallet-kit/LICENSE.upstream
+packages/nido-wallet-kit/.upstream-ref
+# local shim satisfying the module's @g2c/passkey-sdk import
+!packages/g2c-passkey-shim
+!packages/g2c-passkey-shim/**
 
 # generated contract client imports
 src/contracts/*

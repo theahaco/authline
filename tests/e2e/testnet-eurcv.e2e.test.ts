@@ -80,6 +80,7 @@ describe.skipIf(!RUN)(
 
 		it("reads a fresh account as fully not-activated", async () => {
 			await expect(status(holder.publicKey())).resolves.toEqual({
+				holderKind: "account",
 				hasTrustline: false,
 				isAuthorized: false,
 				isAuthorizedToMaintainLiabilities: false,
@@ -108,6 +109,7 @@ describe.skipIf(!RUN)(
 			await submitAndConfirm(tx)
 
 			await expect(status(holder.publicKey())).resolves.toEqual({
+				holderKind: "account",
 				hasTrustline: true,
 				isAuthorized: false,
 				isAuthorizedToMaintainLiabilities: false,
@@ -133,6 +135,7 @@ describe.skipIf(!RUN)(
 			await submitAndConfirm(tx)
 
 			await expect(status(holder.publicKey())).resolves.toEqual({
+				holderKind: "account",
 				hasTrustline: true,
 				isAuthorized: true,
 				isAuthorizedToMaintainLiabilities: false,

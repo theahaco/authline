@@ -52,6 +52,7 @@ describe("getActivationStatus (Stellar RPC, no Horizon)", () => {
 	it("reports an authorized trustline when AUTHORIZED_FLAG is set", async () => {
 		stubLedgerEntries([entryWithFlags(1)])
 		await expect(status()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: true,
 			isAuthorizedToMaintainLiabilities: false,
@@ -61,6 +62,7 @@ describe("getActivationStatus (Stellar RPC, no Horizon)", () => {
 	it("reports a created-but-unauthorized trustline when the flag is clear", async () => {
 		stubLedgerEntries([entryWithFlags(0)])
 		await expect(status()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: false,
 			isAuthorizedToMaintainLiabilities: false,
@@ -70,6 +72,7 @@ describe("getActivationStatus (Stellar RPC, no Horizon)", () => {
 	it("reports partial authorization (maintain-liabilities bit)", async () => {
 		stubLedgerEntries([entryWithFlags(2)])
 		await expect(status()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: false,
 			isAuthorizedToMaintainLiabilities: true,
@@ -79,6 +82,7 @@ describe("getActivationStatus (Stellar RPC, no Horizon)", () => {
 	it("reports no trustline when the ledger entry is absent", async () => {
 		stubLedgerEntries([])
 		await expect(status()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: false,
 			isAuthorized: false,
 			isAuthorizedToMaintainLiabilities: false,
@@ -88,6 +92,7 @@ describe("getActivationStatus (Stellar RPC, no Horizon)", () => {
 	it("allows a localhost-http RPC (local-dev default)", async () => {
 		stubLedgerEntries([])
 		await expect(status("http://localhost:8000")).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: false,
 			isAuthorized: false,
 			isAuthorizedToMaintainLiabilities: false,
@@ -104,6 +109,7 @@ describe("getActivationStatus (Stellar RPC, no Horizon)", () => {
 			new Error("rpc 503"),
 		)
 		await expect(status()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: false,
 			isAuthorized: false,
 			isAuthorizedToMaintainLiabilities: false,
@@ -117,6 +123,7 @@ describe("getActivationStatus — SAC authorized() view", () => {
 		stubLedgerEntries([entryWithFlags(1)])
 		stubSimulation(simSuccess(true))
 		await expect(statusWithSac()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: true,
 			isAuthorizedToMaintainLiabilities: false,
@@ -128,6 +135,7 @@ describe("getActivationStatus — SAC authorized() view", () => {
 		stubLedgerEntries([entryWithFlags(1)])
 		stubSimulation(simSuccess(false))
 		await expect(statusWithSac()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: true,
 			isAuthorizedToMaintainLiabilities: false,
@@ -139,6 +147,7 @@ describe("getActivationStatus — SAC authorized() view", () => {
 		stubLedgerEntries([])
 		const sim = stubSimulation(simSuccess(true))
 		await expect(statusWithSac()).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: false,
 			isAuthorized: false,
 			isAuthorizedToMaintainLiabilities: false,
@@ -152,6 +161,7 @@ describe("getActivationStatus — SAC authorized() view", () => {
 		stubSimulation({ error: "HostError: Error(Contract, #13)" })
 		const st = await statusWithSac()
 		expect(st).toEqual({
+			holderKind: "account",
 			hasTrustline: true,
 			isAuthorized: true,
 			isAuthorizedToMaintainLiabilities: false,
@@ -174,6 +184,7 @@ describe("getActivationStatus — SAC authorized() view", () => {
 				networkPassphrase: PASSPHRASE,
 			}),
 		).resolves.toEqual({
+			holderKind: "account",
 			hasTrustline: false,
 			isAuthorized: false,
 			isAuthorizedToMaintainLiabilities: false,
@@ -187,5 +198,60 @@ describe("getActivationStatus — SAC authorized() view", () => {
 		const sim = stubSimulation(simSuccess(true))
 		await status()
 		expect(sim).not.toHaveBeenCalled()
+	})
+})
+
+describe("getActivationStatus — contract holders (smart accounts)", () => {
+	const C_ACCT = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
+	const statusForContract = () =>
+		getActivationStatus({
+			rpcUrl: RPC,
+			account: C_ACCT,
+			assetCode: "USDC",
+			assetIssuer: ISSUER,
+			sac: SAC,
+			networkPassphrase: PASSPHRASE,
+		})
+
+	it("reads the SAC view as the authoritative state — no trustline read at all", async () => {
+		const ledger = stubLedgerEntries([entryWithFlags(1)])
+		stubSimulation(simSuccess(true))
+		await expect(statusForContract()).resolves.toEqual({
+			holderKind: "contract",
+			hasTrustline: false,
+			isAuthorized: false,
+			isAuthorizedToMaintainLiabilities: false,
+			sacAuthorized: true,
+		})
+		expect(ledger).not.toHaveBeenCalled()
+	})
+
+	it("reports an unauthorized smart account (AUTH_REQUIRED default)", async () => {
+		stubSimulation(simSuccess(false))
+		await expect(statusForContract()).resolves.toMatchObject({
+			holderKind: "contract",
+			sacAuthorized: false,
+		})
+	})
+
+	it("surfaces a failed SAC read as readError, never a rejection", async () => {
+		stubSimulation({ error: "HostError: Error(Contract, #13)" })
+		const st = await statusForContract()
+		expect(st.holderKind).toBe("contract")
+		expect("sacAuthorized" in st).toBe(false)
+		expect(st.readError).toContain("Error(Contract, #13)")
+	})
+
+	it("never rejects for a malformed account either (non-throwing contract)", async () => {
+		stubLedgerEntries([])
+		const st = await getActivationStatus({
+			rpcUrl: RPC,
+			account: "not-an-address",
+			assetCode: "USDC",
+			assetIssuer: ISSUER,
+		})
+		expect(st.holderKind).toBe("account")
+		expect(st.hasTrustline).toBe(false)
+		expect(st.readError).toBeTruthy()
 	})
 })
