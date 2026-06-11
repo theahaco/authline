@@ -1060,12 +1060,15 @@ export function AuthlineApp() {
 			})
 			.catch(() => {})
 	}
-	const back = () => {
-		statusGen.current++ // invalidate in-flight reads for the cleared address
-		isConnected.current = false
+	// Return to the asset directory WITHOUT dropping the wallet connection —
+	// only the per-asset flow state resets. pick() re-reads the connected
+	// wallet's status for whichever asset is chosen next, so switching assets
+	// never needs a page refresh.
+	const toDirectory = () => {
+		statusGen.current++ // invalidate in-flight reads for the cleared selection
 		setShowModal(false)
-		setAddress("")
 		setHash(null)
+		setErrMsg("")
 		setTrustlineOnly(false)
 		setStatus(null)
 		// Directory = no selection; a lingering deep-link/picked asset must not
@@ -1108,6 +1111,10 @@ export function AuthlineApp() {
 	)
 
 	const activate = useCallback(async () => {
+		// Invalidate any pending pick()-started status read: were it to resolve
+		// mid-transaction it would yank the phase out of busy, re-exposing the
+		// Activate button (double submit) and the back link while signing.
+		statusGen.current++
 		setErrMsg("")
 		setTrustlineOnly(false)
 		setPhase("building")
@@ -1147,6 +1154,8 @@ export function AuthlineApp() {
 	// SAC set_authorized. The connected wallet only pays the fee — authorization
 	// authority comes from the Authorizer being the SAC admin.
 	const authorize = useCallback(async () => {
+		// Same stale-read invalidation as activate() — see the comment there.
+		statusGen.current++
 		setErrMsg("")
 		setTrustlineOnly(false)
 		setPhase("building")
@@ -1186,22 +1195,6 @@ export function AuthlineApp() {
 	} else if (phase === "idle") {
 		body = (
 			<div className="al-fade">
-				<button
-					className="al-link"
-					onClick={back}
-					style={{
-						background: "none",
-						border: "none",
-						cursor: "pointer",
-						padding: 0,
-						marginBottom: 12,
-						fontFamily: AL.disp,
-						fontSize: 12.5,
-						color: AL.mut,
-					}}
-				>
-					‹ All assets
-				</button>
 				<AssetRow
 					asset={asset}
 					status={<Pill accent>{statusPill(asset)}</Pill>}
@@ -1793,8 +1786,9 @@ export function AuthlineApp() {
 		)
 	}
 
-	const connected =
-		!!address && !["idle", "preview", "directory"].includes(phase)
+	// The wallet stays connected across "‹ All assets" — the header pill must
+	// keep showing it in the directory, not pretend the user disconnected.
+	const connected = !!address && isConnected.current
 	const head =
 		phase === "directory"
 			? {
@@ -1944,7 +1938,30 @@ export function AuthlineApp() {
 						{head.s}
 					</p>
 				</div>
-				<Card>{body}</Card>
+				<Card>
+					{/* Always reachable way back to the asset list (wallet connection
+					    kept) — except mid-flight, where abandoning a signing/submitting
+					    transaction would mislead. */}
+					{phase !== "directory" && !busy && (
+						<button
+							className="al-link"
+							onClick={toDirectory}
+							style={{
+								background: "none",
+								border: "none",
+								cursor: "pointer",
+								padding: 0,
+								marginBottom: 12,
+								fontFamily: AL.disp,
+								fontSize: 12.5,
+								color: AL.mut,
+							}}
+						>
+							‹ All assets
+						</button>
+					)}
+					{body}
+				</Card>
 				<div
 					style={{
 						fontFamily: AL.mono,

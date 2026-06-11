@@ -47,6 +47,12 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(liveCodes).toContain("USDC")
 		expect(liveCodes).toContain("TLO")
 		expect(liveCodes).toContain("EURCV")
+		expect(liveCodes).toContain("EURC")
+		expect(liveCodes).toContain("BLND")
+		// EURC went live → it must no longer appear as a roadmap "soon" tile.
+		expect(
+			ASSETS.filter((t) => t.code === "EURC").map((t) => t.status),
+		).toEqual(["live"])
 		// The env/default asset stays the default selection (first).
 		expect(LIVE_ASSETS[0]).toBe(ASSET)
 		const eurcvTile = ASSETS.find((t) => t.code === "EURCV")

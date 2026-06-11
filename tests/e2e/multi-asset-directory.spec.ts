@@ -45,6 +45,9 @@ test("EURCV is live in the USDC build's directory and activates end-to-end", asy
 	await installSigner(page, holder)
 
 	await page.goto("/app.html")
+	// Every registry-pinned testnet asset is a live tile.
+	await expect(page.getByRole("button", { name: /^EC EURC / })).toBeEnabled()
+	await expect(page.getByRole("button", { name: /^BL BLND / })).toBeEnabled()
 	// Exactly one EURCV tile (live from the registry; the roadmap copy deduped)
 	// and it must be enabled — the old single-asset directory grayed it out.
 	// Anchored on the "EV" glyph + code: TLO's tile name contains
@@ -58,6 +61,38 @@ test("EURCV is live in the USDC build's directory and activates end-to-end", asy
 		.getByRole("button", { name: /Activate EURCV · 1 signature/ })
 		.click()
 	await expect(page.getByText(/EURCV trustline authorized/i)).toBeVisible({
+		timeout: 180_000,
+	})
+
+	// "‹ All assets" returns to the directory WITHOUT a page refresh and WITHOUT
+	// dropping the wallet: picking another asset goes straight to its flow (no
+	// Connect step), and the freshly activated EURCV reads as authorized.
+	await page.getByRole("button", { name: /All assets/ }).click()
+	await expect(page.getByText(/Supported assets/i)).toBeVisible()
+	await page.getByRole("button", { name: /^US USDC / }).click()
+	await expect(
+		page.getByRole("button", { name: /Activate USDC · 1 signature/ }),
+	).toBeVisible()
+	await page.getByRole("button", { name: /All assets/ }).click()
+	await page.getByRole("button", { name: /^EV EURCV / }).click()
+	await expect(page.getByText(/You’re all set/)).toBeVisible()
+})
+
+test("EURC (Circle's official testnet asset, open) activates from the directory", async ({
+	page,
+}) => {
+	const holder = Keypair.random()
+	await fund(holder.publicKey())
+	await installSigner(page, holder)
+
+	await page.goto("/app.html")
+	await page.getByRole("button", { name: /^EC EURC / }).click()
+	await page.getByRole("button", { name: /Connect wallet/i }).click()
+	await page
+		.getByRole("button", { name: /Activate EURC · 1 signature/ })
+		.click()
+	// Open asset: CAP-73 trust() creates the line already authorized.
+	await expect(page.getByText(/EURC trustline authorized/i)).toBeVisible({
 		timeout: 180_000,
 	})
 })
