@@ -14,14 +14,26 @@ import {
  * the Pages workflow). Add/replace the live asset by config alone.
  */
 
+/**
+ * Read a PUBLIC_* env var, treating a blank / whitespace-only value as unset. A
+ * literal `FOO=` in a .env (or a scaffold-injected blank) loads as "", which
+ * `??` would otherwise accept as a real value and defeat the intended fallback —
+ * e.g. a blank `PUBLIC_ROUTER=` would suppress the pinned ROUTERS id and leave
+ * the dApp showing "Activation unavailable".
+ */
+const env = (v: string | undefined): string | undefined => {
+	const t = v?.trim()
+	return t ? t : undefined
+}
+
 const RPC_URL =
-	import.meta.env.PUBLIC_STELLAR_RPC_URL ??
+	env(import.meta.env.PUBLIC_STELLAR_RPC_URL) ??
 	"https://soroban-testnet.stellar.org"
 
 export const NETWORK = {
 	rpcUrl: RPC_URL,
 	passphrase:
-		import.meta.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE ??
+		env(import.meta.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE) ??
 		"Test SDF Network ; September 2015",
 	// Permit cleartext http only for a local quickstart (localhost/127.0.0.1);
 	// any remote endpoint stays https-only. Mirrors the SDK's defaultAllowHttp so
@@ -69,7 +81,8 @@ const NET_TAG = netFromPassphrase(NETWORK.passphrase)
 // setting PUBLIC_ASSET_CODE gets a working asset instead of mainnet EURCV (which
 // has no testnet issuer/SAC and cannot be activated). Override with PUBLIC_ASSET_CODE.
 const CODE =
-	import.meta.env.PUBLIC_ASSET_CODE ?? (NET_TAG === "PUBLIC" ? "EURCV" : "USDC")
+	env(import.meta.env.PUBLIC_ASSET_CODE) ??
+	(NET_TAG === "PUBLIC" ? "EURCV" : "USDC")
 const pinned = resolveOfficialAsset(CODE, NET_TAG)
 
 /** The live, wired asset (the one the dApp actually activates on-chain). */
@@ -87,19 +100,27 @@ export interface AssetConfig extends OnboarderConfig {
 
 export const ASSET: AssetConfig = {
 	assetCode: CODE,
+	// Prefer the registry-pinned issuer for the resolved (code, network) — the
+	// hardcoded mainnet EURCV issuer is only the last-resort default and must
+	// never shadow a pinned testnet entry of the same code.
 	assetIssuer:
-		import.meta.env.PUBLIC_ASSET_ISSUER ??
+		env(import.meta.env.PUBLIC_ASSET_ISSUER) ??
+		pinned?.issuer ??
 		"GCEYGIVOLAVBF2TG2RUSGTUJCIN75KEX3NGLMY4VPL4GFE5L355AXW3G",
-	sac: import.meta.env.PUBLIC_SAC ?? pinned?.sac ?? "",
-	authorizer: import.meta.env.PUBLIC_AUTHORIZER ?? pinned?.authorizer ?? "",
-	router: import.meta.env.PUBLIC_ROUTER ?? ROUTERS[NET_TAG] ?? "",
+	sac: env(import.meta.env.PUBLIC_SAC) ?? pinned?.sac ?? "",
+	authorizer:
+		env(import.meta.env.PUBLIC_AUTHORIZER) ?? pinned?.authorizer ?? "",
+	router: env(import.meta.env.PUBLIC_ROUTER) ?? ROUTERS[NET_TAG] ?? "",
 	backends: ["cap73-one-signature", "cap33-sponsored"],
-	name: import.meta.env.PUBLIC_ASSET_NAME ?? pinned?.name ?? "Stellar asset",
+	name:
+		env(import.meta.env.PUBLIC_ASSET_NAME) ?? pinned?.name ?? "Stellar asset",
 	glyph: CODE.slice(0, 2).toUpperCase(),
 	kind:
-		import.meta.env.PUBLIC_ASSET_KIND ?? pinned?.homeDomain ?? "Stellar asset",
+		env(import.meta.env.PUBLIC_ASSET_KIND) ??
+		pinned?.homeDomain ??
+		"Stellar asset",
 	networkLabel: NETWORK_LABEL,
-	capability: (import.meta.env.PUBLIC_AUTHORIZER
+	capability: (env(import.meta.env.PUBLIC_AUTHORIZER)
 		? "permissionedOneStep"
 		: (pinned?.capability ?? "open")) as AssetCapability,
 	authRevocable:
@@ -116,8 +137,10 @@ export const ASSET: AssetConfig = {
 // inside transaction building.
 if (!ASSET.router)
 	console.error(
-		`[config] no onboard router configured for network ${NET_TAG} — ` +
-			"set PUBLIC_ROUTER or pin it in the SDK's ROUTERS.",
+		`[config] no onboard router configured for network ${NET_TAG} ` +
+			`(passphrase "${NETWORK.passphrase}") — activation is unavailable. ` +
+			"Use a network with a pinned ROUTERS entry (testnet) or set PUBLIC_ROUTER " +
+			"to this network's router id. Note: a blank PUBLIC_ROUTER= counts as unset.",
 	)
 
 /** Directory: the configured asset is Live; the rest are the roadmap. */

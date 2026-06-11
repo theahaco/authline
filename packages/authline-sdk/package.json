@@ -1,6 +1,6 @@
 {
   "name": "@theaha/authline",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Integrator SDK for one-signature trustline onboarding via an on-chain discovery router (Trustline Onboarder / SEP draft v0.3).",
   "license": "Apache-2.0",
   "type": "module",
@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {

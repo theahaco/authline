@@ -120,6 +120,26 @@ export const OFFICIAL_ASSETS: OfficialAsset[] = [
 		authClawback: false,
 		verifiedAt: "2026-06-10",
 	},
+	{
+		// Testnet EURCV test token — same code as the mainnet asset, so the
+		// dApp's EURCV flow is exercisable end-to-end on testnet (resolution is
+		// per (code, network), so this never shadows the mainnet pin). Issued by
+		// scripts/issue-test-asset.sh: AUTH_REQUIRED + AUTH_REVOCABLE issuer (no
+		// clawback, unlike mainnet EURCV), authorizer-stub set as the SAC admin.
+		// Verified 2026-06-11: issuer flags via Horizon, SAC id re-derived with
+		// Asset.contractId(TESTNET), SAC admin()==stub and stub sac()==SAC via
+		// RPC simulation. Activate in the dApp with PUBLIC_ASSET_CODE=EURCV.
+		code: "EURCV",
+		issuer: "GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
+		sac: "CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
+		authorizer: "CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+		capability: "permissionedOneStep",
+		name: "EUR CoinVertible (testnet test token)",
+		network: "TESTNET",
+		authRevocable: true,
+		authClawback: false,
+		verifiedAt: "2026-06-11",
+	},
 ]
 
 /**

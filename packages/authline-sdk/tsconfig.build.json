@@ -1,0 +1,7 @@
+{
+	// Build-only project: excludes tests so they never land in dist/. The base
+	// tsconfig.json covers ALL of src (tests included) for editors and eslint's
+	// typed linting (project service).
+	"extends": "./tsconfig.json",
+	"exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
 import { xdr } from "@stellar/stellar-sdk"
+import { describe, expect, it } from "vitest"
 import { decodeOnboardStatus } from "./onboard-status.js"
 
 // A #[contracttype] unit enum comes back as a single-symbol vec.

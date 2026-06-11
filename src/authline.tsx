@@ -10,12 +10,14 @@ import {
 } from "@creit.tech/stellar-wallets-kit"
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import {
+	buildAuthorizeTx,
 	buildOnboardTx,
 	decodeOnboardStatus,
 	getActivationStatus,
 	isValidIssuer,
+	type ActivationStatus,
 } from "@theaha/authline"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ASSET, ASSETS, NETWORK, REPO_URL, type DirItem } from "./config.js"
 
 // ── Warm "paper" palette (AL) ────────────────────────────────────────
@@ -92,6 +94,10 @@ const IS_OPEN = ASSET.capability === "open"
 // No router id for this network (no pinned ROUTERS entry, no PUBLIC_ROUTER) —
 // activation cannot build a transaction, so the CTA must not promise one.
 const ROUTER_MISSING = !ASSET.router
+// The asset's on-chain authorizer (its SAC admin) is known — for an existing
+// unauthorized trustline the dApp can offer the direct authorize-only call
+// (authorize_trustline → SAC set_authorized) instead of the full onboard.
+const CAN_AUTHORIZE = !!ASSET.authorizer
 const STATUS_PILL = IS_OPEN ? "Open" : "Auth req."
 const ERROR_HEADING = IS_OPEN
 	? "Couldn’t create trustline"
@@ -101,6 +107,7 @@ type Phase =
 	| "directory"
 	| "idle"
 	| "ready"
+	| "authorize" // trustline exists but is not authorized — offer the direct authorize call
 	| "building"
 	| "signing"
 	| "submitting"
@@ -362,6 +369,63 @@ function Ghost({
 }
 function Divider() {
 	return <div style={{ height: 1, background: AL.line, margin: "16px 0" }} />
+}
+
+/**
+ * The truthful trustline state, read from the ledger: trustline existence,
+ * the classic AUTHORIZED flag, and (when the asset has a SAC wired) the SAC's
+ * own `authorized()` view. The SAC row goes amber when it disagrees with the
+ * classic flag — for a G-account both reflect the same trustline flag, so a
+ * divergence means the Soroban read failed to match the ledger.
+ */
+function StatusRows({ st }: { st: ActivationStatus | null }) {
+	const amber = "#B7791F"
+	// null = the ledger read failed or hasn't happened — unknown, never "None".
+	if (!st) {
+		return (
+			<>
+				<KV k="Trustline" v="—" accent={AL.mut} mono={false} />
+				<KV k="Authorized" v="—" accent={AL.mut} mono={false} />
+				{ASSET.sac && (
+					<KV k="SAC authorized" v="—" accent={AL.mut} mono={false} />
+				)}
+			</>
+		)
+	}
+	const trustline = st.hasTrustline
+		? st.isAuthorized
+			? { v: "● Active", c: AL.emeraldBright }
+			: { v: "● Created — not authorized", c: amber }
+		: { v: "● None", c: AL.mut }
+	// Partial authorization (maintain liabilities only — e.g. a frozen line) is
+	// a distinct compliance state; never render it as plain "No".
+	const authorized = st.isAuthorized
+		? { v: "● Yes", c: AL.emeraldBright }
+		: st.isAuthorizedToMaintainLiabilities
+			? { v: "Partial — maintain only", c: amber }
+			: { v: "No", c: undefined }
+	const sacKnown = st.sacAuthorized !== undefined
+	const sacDiverges = sacKnown && st.sacAuthorized !== st.isAuthorized
+	return (
+		<>
+			<KV k="Trustline" v={trustline.v} accent={trustline.c} mono={false} />
+			<KV k="Authorized" v={authorized.v} accent={authorized.c} mono={false} />
+			{ASSET.sac && (
+				<KV
+					k="SAC authorized"
+					v={!sacKnown ? "—" : st.sacAuthorized ? "● Yes" : "No"}
+					accent={
+						sacDiverges
+							? amber
+							: st.sacAuthorized
+								? AL.emeraldBright
+								: undefined
+					}
+					mono={false}
+				/>
+			)}
+		</>
+	)
 }
 
 // ── Wallet modal (wired to Stellar Wallets Kit) ──────────────────────
@@ -769,6 +833,65 @@ function Directory({ onPick }: { onPick: (a: DirItem) => void }) {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** Read the full activation status (classic flags + SAC view) for an account. */
+const fetchStatus = (account: string): Promise<ActivationStatus> =>
+	getActivationStatus({
+		rpcUrl: NETWORK.rpcUrl,
+		allowHttp: NETWORK.allowHttp,
+		account,
+		assetCode: ASSET.assetCode,
+		assetIssuer: ASSET.assetIssuer,
+		sac: ASSET.sac || undefined,
+		networkPassphrase: NETWORK.passphrase,
+	})
+
+/** The truthful phase for a connected account's on-ledger state. */
+const phaseFor = (st: ActivationStatus): Phase =>
+	st.isAuthorized
+		? "already"
+		: st.hasTrustline && CAN_AUTHORIZE
+			? "authorize"
+			: "ready"
+
+/**
+ * Whether the classic-flags part of a status read is trustworthy. The SDK
+ * never rejects on a transient read failure — it resolves `{ false, false,
+ * readError }` — so an all-false status WITH a readError must be treated as
+ * unknown, never stored or rendered as a definitive "no trustline". (A
+ * readError alongside hasTrustline=true means only the best-effort SAC view
+ * failed; the classic flags are still authoritative.)
+ */
+const classicReadOk = (st: ActivationStatus): boolean =>
+	!st.readError || st.hasTrustline
+
+/**
+ * Submit a signed tx and poll for confirmation. Bounded: a tx that never
+ * lands must surface an error instead of leaving the UI stuck on
+ * "Submitting…" forever.
+ */
+async function submitAndConfirm(signedTxXdr: string) {
+	const server = new rpc.Server(NETWORK.rpcUrl, {
+		allowHttp: NETWORK.allowHttp,
+	})
+	const sent = await server.sendTransaction(
+		TransactionBuilder.fromXDR(signedTxXdr, NETWORK.passphrase),
+	)
+	if (sent.status === "ERROR") throw new Error("Transaction submission failed")
+	const deadline = Date.now() + 180_000
+	let got = await server.getTransaction(sent.hash)
+	while (got.status === "NOT_FOUND" && Date.now() < deadline) {
+		await sleep(1100)
+		got = await server.getTransaction(sent.hash)
+	}
+	if (got.status === "NOT_FOUND")
+		throw new Error("Transaction not confirmed within 180s — try again")
+	// Compare against the enum (not the string literal) so TypeScript
+	// narrows `got` to GetSuccessfulTransactionResponse → `returnValue`.
+	if (got.status !== rpc.Api.GetTransactionStatus.SUCCESS)
+		throw new Error(`Transaction ${got.status.toLowerCase()}`)
+	return { hash: sent.hash, returnValue: got.returnValue }
+}
+
 export function AuthlineApp() {
 	const [address, setAddress] = useState("")
 	const [phase, setPhase] = useState<Phase>("directory")
@@ -778,6 +901,17 @@ export function AuthlineApp() {
 	// Truthful router outcome: trustline created but NOT authorized (the asset
 	// has no one-step authorizer) — drives the success copy.
 	const [trustlineOnly, setTrustlineOnly] = useState(false)
+	// Last RELIABLE ledger read for `address` (classic flags + SAC view);
+	// null = unread or the read failed (unknown — never claimed as "none").
+	const [status, setStatus] = useState<ActivationStatus | null>(null)
+	// Stale-async guard: bumped whenever the account context changes (connect,
+	// back). In-flight status reads from a previous generation must not commit
+	// state — otherwise a slow read for account A lands after connecting B and
+	// pairs B's address with A's status.
+	const statusGen = useRef(0)
+	// Whether `address` came from a wallet connection (vs the read-only
+	// ?address= preview) — only a connected wallet may reach signing phases.
+	const isConnected = useRef(false)
 	const [available, setAvailable] = useState<Set<string>>(new Set())
 	// wallet availability for the modal detection dots
 	useEffect(() => {
@@ -801,19 +935,20 @@ export function AuthlineApp() {
 		let cancelled = false
 		const a = new URLSearchParams(window.location.search).get("address")
 		if (a && isValidIssuer(a)) {
+			const gen = statusGen.current
 			setAddress(a)
-			getActivationStatus({
-				rpcUrl: NETWORK.rpcUrl,
-				allowHttp: NETWORK.allowHttp,
-				account: a,
-				assetCode: ASSET.assetCode,
-				assetIssuer: ASSET.assetIssuer,
-			})
+			fetchStatus(a)
 				.then((st) => {
-					if (!cancelled) setPhase(st.isAuthorized ? "already" : "preview")
+					if (cancelled || gen !== statusGen.current) return
+					if (classicReadOk(st)) {
+						setStatus(st)
+						setPhase(st.isAuthorized ? "already" : "preview")
+					} else {
+						setPhase("preview") // status stays null → rendered as unknown
+					}
 				})
 				.catch(() => {
-					if (!cancelled) setPhase("preview")
+					if (!cancelled && gen === statusGen.current) setPhase("preview")
 				})
 		}
 		return () => {
@@ -822,6 +957,11 @@ export function AuthlineApp() {
 	}, [])
 
 	const connect = useCallback(async (id: string) => {
+		// New account context: invalidate any in-flight status read (a slow read
+		// for the previous address must not pair with the new one), and close the
+		// modal up front so a stalled wallet popup can't spawn a second connect.
+		const gen = ++statusGen.current
+		setShowModal(false)
 		try {
 			const e2e = e2eSigner()
 			let addr: string
@@ -831,39 +971,77 @@ export function AuthlineApp() {
 				kit.setWallet(id)
 				addr = (await kit.getAddress()).address
 			}
-			setShowModal(false)
+			if (gen !== statusGen.current) return
+			isConnected.current = true
 			setAddress(addr)
-			const st = await getActivationStatus({
-				rpcUrl: NETWORK.rpcUrl,
-				allowHttp: NETWORK.allowHttp,
-				account: addr,
-				assetCode: ASSET.assetCode,
-				assetIssuer: ASSET.assetIssuer,
-			})
-			setPhase(st.isAuthorized ? "already" : "ready")
+			setStatus(null)
+			const st = await fetchStatus(addr)
+			if (gen !== statusGen.current) return
+			if (classicReadOk(st)) {
+				setStatus(st)
+				setPhase(phaseFor(st))
+			} else {
+				// Unknown ledger state: offer the normal activate flow (the router
+				// call is idempotent) instead of asserting "no trustline".
+				setPhase("ready")
+			}
 		} catch (e) {
-			setShowModal(false)
+			if (gen !== statusGen.current) return
 			setErrMsg(e instanceof Error ? e.message : String(e))
 			setPhase("error")
 		}
 	}, [])
 
 	const pick = (a: DirItem) => {
-		if (a.status === "live") setPhase(address ? "ready" : "idle")
+		if (a.status !== "live") return
+		// A ?address= preview address is NOT a connected wallet — it must go
+		// through the connect flow, not straight to signing-capable phases.
+		setPhase(
+			address && isConnected.current
+				? status
+					? phaseFor(status)
+					: "ready"
+				: "idle",
+		)
 	}
 	const back = () => {
+		statusGen.current++ // invalidate in-flight reads for the cleared address
+		isConnected.current = false
 		setShowModal(false)
 		setAddress("")
 		setHash(null)
 		setTrustlineOnly(false)
+		setStatus(null)
 		setPhase("directory")
 	}
 	const reset = () => {
 		setHash(null)
 		setErrMsg("")
 		setTrustlineOnly(false)
-		setPhase(address ? "ready" : "directory")
+		// Decide from the latest ledger read (refreshed after every submit), so a
+		// freshly activated account lands on "already" — not the Activate CTA.
+		setPhase(address ? (status ? phaseFor(status) : "ready") : "directory")
 	}
+
+	// Re-read the ledger after a submit so the stored status (and therefore
+	// reset()/StatusRows) reflect the new on-chain state. Best-effort: a read
+	// hiccup must not fail a confirmed transaction, and an UNRELIABLE read
+	// (readError with no trustline visible) must not overwrite a good status —
+	// returning null tells the caller "unknown", not "not activated".
+	const refreshStatus = useCallback(
+		async (account: string): Promise<ActivationStatus | null> => {
+			const gen = statusGen.current
+			try {
+				const st = await fetchStatus(account)
+				if (gen !== statusGen.current || !classicReadOk(st)) return null
+				setStatus(st)
+				return st
+			} catch {
+				return null
+			}
+		},
+		[],
+	)
 
 	const activate = useCallback(async () => {
 		setErrMsg("")
@@ -880,42 +1058,60 @@ export function AuthlineApp() {
 			setPhase("signing")
 			const signedTxXdr = await signTx(xdr, address)
 			setPhase("submitting")
-			const server = new rpc.Server(NETWORK.rpcUrl, {
-				allowHttp: NETWORK.allowHttp,
-			})
-			const sent = await server.sendTransaction(
-				TransactionBuilder.fromXDR(signedTxXdr, NETWORK.passphrase),
-			)
-			if (sent.status === "ERROR")
-				throw new Error("Transaction submission failed")
-			// Bound the confirmation poll: a tx that never lands must surface an
-			// error instead of leaving the UI stuck on "Submitting…" forever.
-			const deadline = Date.now() + 180_000
-			let got = await server.getTransaction(sent.hash)
-			while (got.status === "NOT_FOUND" && Date.now() < deadline) {
-				await sleep(1100)
-				got = await server.getTransaction(sent.hash)
-			}
-			if (got.status === "NOT_FOUND")
-				throw new Error("Transaction not confirmed within 180s — try again")
-			// Compare against the enum (not the string literal) so TypeScript
-			// narrows `got` to GetSuccessfulTransactionResponse → `returnValue`.
-			if (got.status !== rpc.Api.GetTransactionStatus.SUCCESS)
-				throw new Error(`Transaction ${got.status.toLowerCase()}`)
+			const { hash, returnValue } = await submitAndConfirm(signedTxXdr)
 			// The router reports the truthful outcome: Authorized, or
 			// TrustlineOnly (trustline kept, no one-step authorizer). On an
 			// unknown/undecodable return value, fall back to the asset's static
 			// capability so we never render the stronger "authorized" claim for an
 			// asset that may only be trustline-only.
-			const status = decodeOnboardStatus(got.returnValue)
-			setTrustlineOnly(status ? status === "TrustlineOnly" : !IS_OPEN)
-			setHash(sent.hash)
+			const outcome = decodeOnboardStatus(returnValue)
+			setTrustlineOnly(outcome ? outcome === "TrustlineOnly" : !IS_OPEN)
+			await refreshStatus(address)
+			setHash(hash)
 			setPhase("success")
 		} catch (e) {
+			// Refresh in the background: a timed-out tx may still land, and the
+			// error screen's Try-again/Cancel route from the stored status.
+			void refreshStatus(address)
 			setErrMsg(e instanceof Error ? e.message : String(e))
 			setPhase("error")
 		}
-	}, [address])
+	}, [address, refreshStatus])
+
+	// Direct authorize-only call for an existing unauthorized trustline: the
+	// asset's Authorizer contract (its SAC admin) runs authorize_trustline →
+	// SAC set_authorized. The connected wallet only pays the fee — authorization
+	// authority comes from the Authorizer being the SAC admin.
+	const authorize = useCallback(async () => {
+		setErrMsg("")
+		setTrustlineOnly(false)
+		setPhase("building")
+		try {
+			const xdr = await buildAuthorizeTx({
+				rpcUrl: NETWORK.rpcUrl,
+				networkPassphrase: NETWORK.passphrase,
+				source: address,
+				account: address,
+				config: ASSET,
+				allowHttp: NETWORK.allowHttp,
+			})
+			setPhase("signing")
+			const signedTxXdr = await signTx(xdr, address)
+			setPhase("submitting")
+			const { hash } = await submitAndConfirm(signedTxXdr)
+			// Truthful success copy: only claim "authorized" if the ledger agrees.
+			const st = await refreshStatus(address)
+			setTrustlineOnly(st ? !st.isAuthorized : false)
+			setHash(hash)
+			setPhase("success")
+		} catch (e) {
+			// Refresh in the background: a timed-out tx may still land, and the
+			// error screen's Try-again/Cancel route from the stored status.
+			void refreshStatus(address)
+			setErrMsg(e instanceof Error ? e.message : String(e))
+			setPhase("error")
+		}
+	}, [address, refreshStatus])
 
 	const busy =
 		phase === "building" || phase === "signing" || phase === "submitting"
@@ -1062,7 +1258,13 @@ export function AuthlineApp() {
 						. Connect this account to activate.
 					</div>
 				</div>
-				<AssetRow status={<Pill>Not yet</Pill>} />
+				<AssetRow
+					status={
+						<Pill tone="mut" accent={status?.hasTrustline}>
+							{status?.hasTrustline ? "Trustline" : "Not yet"}
+						</Pill>
+					}
+				/>
 				<div
 					style={{
 						display: "flex",
@@ -1073,8 +1275,7 @@ export function AuthlineApp() {
 						borderBottom: `1px solid ${AL.line}`,
 					}}
 				>
-					<KV k="Trustline" v="● None" accent={AL.mut} mono={false} />
-					<KV k="Authorized" v="No" mono={false} />
+					<StatusRows st={status} />
 				</div>
 				<div style={{ marginTop: 18 }}>
 					<Primary onClick={() => setShowModal(true)}>
@@ -1167,6 +1368,68 @@ export function AuthlineApp() {
 						Activate {ASSET.assetCode} · 1 signature
 					</Primary>
 				)}
+				<div
+					style={{
+						textAlign: "center",
+						fontFamily: AL.mono,
+						fontSize: 10.5,
+						color: AL.mut2,
+						marginTop: 12,
+					}}
+				>
+					Only the network fee is spent.
+				</div>
+			</div>
+		)
+	} else if (phase === "authorize") {
+		body = (
+			<div className="al-fade">
+				<AssetRow status={<Pill>Trustline only</Pill>} />
+				<div
+					style={{
+						display: "flex",
+						flexDirection: "column",
+						gap: 11,
+						padding: "15px 0",
+						borderTop: `1px solid ${AL.line}`,
+						borderBottom: `1px solid ${AL.line}`,
+					}}
+				>
+					<KV k="Your account" v={short(address)} />
+					<StatusRows st={status} />
+				</div>
+				<p
+					style={{
+						fontFamily: AL.disp,
+						fontSize: 12.5,
+						lineHeight: 1.5,
+						color: AL.mut,
+						margin: "15px 0 16px",
+					}}
+				>
+					Your {ASSET.assetCode} trustline exists but isn’t authorized yet. One
+					signature calls the issuer’s on-chain authorizer (
+					<span style={{ fontFamily: AL.mono, color: AL.ink }}>
+						authorize_trustline
+					</span>
+					, the asset’s SAC admin) to authorize it — no new trustline is
+					created.
+				</p>
+				<Primary onClick={authorize}>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 16 16"
+						fill="none"
+						stroke="#FFFFFF"
+						strokeWidth="1.9"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
+						<path d="M3.5 8.5l3 3 6-7" />
+					</svg>
+					Authorize {ASSET.assetCode} · 1 signature
+				</Primary>
 				<div
 					style={{
 						textAlign: "center",
@@ -1363,7 +1626,7 @@ export function AuthlineApp() {
 					}}
 				>
 					<KV k="Your account" v={short(address)} />
-					<KV k="Authorized" v="● Yes" accent={AL.emeraldBright} mono={false} />
+					<StatusRows st={status} />
 				</div>
 				<p
 					style={{
@@ -1439,7 +1702,20 @@ export function AuthlineApp() {
 					<Ghost full onClick={reset}>
 						Cancel
 					</Ghost>
-					<Primary onClick={activate}>Try again</Primary>
+					{/* Retry the action that matches the ledger state: an existing
+					    unauthorized trustline retries the direct authorize call. */}
+					<Primary
+						onClick={
+							status &&
+							status.hasTrustline &&
+							!status.isAuthorized &&
+							CAN_AUTHORIZE
+								? authorize
+								: activate
+						}
+					>
+						Try again
+					</Primary>
 				</div>
 			</div>
 		)
