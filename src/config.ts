@@ -1,4 +1,5 @@
 import {
+	assetsForNetwork,
 	resolveOfficialAsset,
 	netFromPassphrase,
 	isValidIssuer,
@@ -6,12 +7,14 @@ import {
 	defaultAllowHttp,
 	ROUTERS,
 	type AssetCapability,
+	type OfficialAsset,
 	type OnboarderConfig,
 } from "@theaha/authline"
 
 /**
- * Config-driven. The live asset + network come from PUBLIC_* env (app/.env or
- * the Pages workflow). Add/replace the live asset by config alone.
+ * Config-driven. The network comes from PUBLIC_* env (app/.env or the Pages
+ * workflow); the live assets come from the SDK registry pins for that network,
+ * with PUBLIC_ASSET_* env overriding/adding the default-selected one.
  */
 
 /**
@@ -85,6 +88,12 @@ const CODE =
 	(NET_TAG === "PUBLIC" ? "EURCV" : "USDC")
 const pinned = resolveOfficialAsset(CODE, NET_TAG)
 
+// Display glyphs. Prefix alone collides for near-identical codes (EURC and
+// EURCV are both "EU"); the overrides match the long-standing roadmap glyphs.
+const GLYPHS: Record<string, string> = { EURC: "EC", EURCV: "EV" }
+const glyphFor = (code: string): string =>
+	GLYPHS[code] ?? code.slice(0, 2).toUpperCase()
+
 /** The live, wired asset (the one the dApp actually activates on-chain). */
 export interface AssetConfig extends OnboarderConfig {
 	name: string
@@ -114,7 +123,7 @@ export const ASSET: AssetConfig = {
 	backends: ["cap73-one-signature", "cap33-sponsored"],
 	name:
 		env(import.meta.env.PUBLIC_ASSET_NAME) ?? pinned?.name ?? "Stellar asset",
-	glyph: CODE.slice(0, 2).toUpperCase(),
+	glyph: glyphFor(CODE),
 	kind:
 		env(import.meta.env.PUBLIC_ASSET_KIND) ??
 		pinned?.homeDomain ??
@@ -129,6 +138,59 @@ export const ASSET: AssetConfig = {
 	authClawback:
 		import.meta.env.PUBLIC_ASSET_CLAWBACK === "true" ||
 		(pinned?.authClawback ?? false),
+}
+
+/** Wire a registry-pinned asset into a fully usable AssetConfig. */
+const fromPinned = (a: OfficialAsset): AssetConfig => ({
+	assetCode: a.code,
+	assetIssuer: a.issuer,
+	sac: a.sac,
+	authorizer: a.authorizer ?? "",
+	// The router is a per-network singleton — same id for every live asset.
+	router: env(import.meta.env.PUBLIC_ROUTER) ?? ROUTERS[NET_TAG] ?? "",
+	backends: ["cap73-one-signature", "cap33-sponsored"],
+	name: a.name,
+	glyph: glyphFor(a.code),
+	kind: a.homeDomain ?? "Stellar asset",
+	networkLabel: NETWORK_LABEL,
+	capability: a.capability,
+	authRevocable: a.authRevocable ?? false,
+	authClawback: a.authClawback ?? false,
+})
+
+/**
+ * Every asset that is LIVE on this network: the env-configured default first
+ * (env still wins for bespoke deployments and the e2e build modes), then every
+ * other registry-pinned asset for the network. A hosted build with no
+ * PUBLIC_ASSET_* env therefore offers all pinned assets — config alone no
+ * longer limits the dApp to a single activatable asset.
+ */
+export const LIVE_ASSETS: AssetConfig[] = [
+	ASSET,
+	...assetsForNetwork(NET_TAG)
+		.filter((a) => a.code !== ASSET.assetCode)
+		.map(fromPinned),
+]
+
+// The dedupe above is by code (the directory and pick() key tiles by code), so
+// env overrides REPLACE a same-code registry pin rather than adding beside it.
+// Overriding a pinned asset's issuer/SAC therefore ships a hybrid under the
+// pinned name with the registry's anti-copycat protection silently dropped —
+// almost certainly a deployment mistake. Warn loudly.
+if (pinned) {
+	const issuerOverride = env(import.meta.env.PUBLIC_ASSET_ISSUER)
+	if (issuerOverride && issuerOverride !== pinned.issuer)
+		console.warn(
+			`[config] PUBLIC_ASSET_ISSUER (${issuerOverride}) differs from the ` +
+				`registry pin for ${CODE} on ${NET_TAG} (${pinned.issuer}) — the ` +
+				"pinned asset is REPLACED in the directory, not listed alongside.",
+		)
+	const sacOverride = env(import.meta.env.PUBLIC_SAC)
+	if (sacOverride && sacOverride !== pinned.sac)
+		console.warn(
+			`[config] PUBLIC_SAC (${sacOverride}) differs from the registry pin ` +
+				`for ${CODE} on ${NET_TAG} (${pinned.sac}).`,
+		)
 }
 
 // Every activation flows through the router (which discovers the asset's
@@ -186,17 +248,17 @@ const roadmap: DirItem[] = [
 ]
 
 export const ASSETS: DirItem[] = [
-	{
-		code: ASSET.assetCode,
-		name: ASSET.name,
-		glyph: ASSET.glyph,
-		kind: ASSET.kind,
-		status: "live",
-		authClawback: ASSET.authClawback,
-		authRevocable: ASSET.authRevocable,
-	},
-	// dedupe: do not list a roadmap asset that is already the live asset
-	...roadmap.filter((a) => a.code !== ASSET.assetCode),
+	...LIVE_ASSETS.map((a) => ({
+		code: a.assetCode,
+		name: a.name,
+		glyph: a.glyph,
+		kind: a.kind,
+		status: "live" as const,
+		authClawback: a.authClawback,
+		authRevocable: a.authRevocable,
+	})),
+	// dedupe: do not list a roadmap asset that is already live
+	...roadmap.filter((r) => !LIVE_ASSETS.some((a) => a.assetCode === r.code)),
 ]
 
 export const REPO_URL = "https://github.com/theahaco/stellar-assets"
