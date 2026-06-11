@@ -335,43 +335,6 @@
 			.mbtn:hover {
 				background: var(--green-bright);
 			}
-			.mdone {
-				margin-top: 16px;
-				display: flex;
-				align-items: center;
-				gap: 11px;
-				background: var(--mint);
-				border: 1px solid var(--mint-line);
-				border-radius: 13px;
-				padding: 14px 16px;
-			}
-			.mdone .ring {
-				width: 26px;
-				height: 26px;
-				border-radius: 50%;
-				background: var(--green);
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				flex-shrink: 0;
-			}
-			.mdone .ring svg {
-				width: 14px;
-				height: 14px;
-				stroke: #fff;
-				fill: none;
-				stroke-width: 2.6;
-			}
-			.mdone .dt {
-				font-family: var(--disp);
-				font-weight: 600;
-				font-size: 14.5px;
-				color: var(--green);
-			}
-			.mdone .dd {
-				font-size: 12.5px;
-				color: var(--ink-2);
-			}
 			.mfoot {
 				margin-top: 18px;
 				text-align: center;
@@ -444,6 +407,12 @@
 			.acard:hover {
 				transform: translateY(-3px);
 				box-shadow: 0 18px 36px -26px rgba(40, 30, 15, 0.5);
+			}
+			/* live cards are links into the dApp */
+			a.acard {
+				text-decoration: none;
+				color: inherit;
+				cursor: pointer;
 			}
 			.acard.soon {
 				background: transparent;
@@ -829,6 +798,8 @@
 				}
 			}
 		</style>
+		<script type="module" crossorigin src="./assets/main-DWtoejno.js"></script>
+		<link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-B5Qt9EMX.js">
 	</head>
 	<body>
 		<template id="__bundler_thumbnail">
@@ -924,26 +895,20 @@
 							</div>
 							<div class="mline">
 								<span class="k">Network</span
-								><span class="v">Stellar · Mainnet</span>
+								><!-- filled from config by landing.ts; the static text must
+								     not claim a network the build may not target -->
+								<span class="v" id="mNet">Stellar</span>
 							</div>
 							<div class="mline">
 								<span class="k">You pay</span
 								><span class="v">≈ 0.00005 XLM fee</span>
 							</div>
+							<!-- Navigates to the real dApp (?asset= deep link). The old
+							     fake in-place "Authorized and ready" animation taught
+							     visitors they were done when nothing happened on-chain. -->
 							<button class="mbtn" id="mBtn" type="button">
 								<span id="mBtnText">Activate EURCV</span>
 							</button>
-							<div class="mdone" id="mDone" style="display: none">
-								<span class="ring"
-									><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" /></svg
-								></span>
-								<div>
-									<div class="dt">
-										<span id="mDoneCode">EURCV</span> is ready
-									</div>
-									<div class="dd">Authorized and ready to receive.</div>
-								</div>
-							</div>
 							<div class="mfoot">Authline never touches your keys.</div>
 						</div>
 					</div>
@@ -957,48 +922,13 @@
 						<div class="tagrow">The assets people actually hold</div>
 						<h2>Built for real money on Stellar.</h2>
 						<p>
-							EURCV is live and onboarding holders today. More of the assets
-							people are bringing on-chain are next in line.
+							Live assets activate with one signature today — tap one to open it
+							in the app. The rest of the roadmap is next in line.
 						</p>
 					</div>
-					<div class="assetgrid">
-						<div class="acard live reveal">
-							<div class="aglyph">EU</div>
-							<div>
-								<div class="acode">EURCV</div>
-								<div class="aname">
-									EUR CoinVertible · Société Générale-Forge
-								</div>
-							</div>
-							<span class="abadge live">● Live now</span>
-						</div>
-						<div class="acard soon reveal">
-							<div class="aglyph">US</div>
-							<div>
-								<div class="acode">USDC</div>
-								<div class="aname">USD Coin · Circle</div>
-							</div>
-							<span class="abadge soon">Coming soon</span>
-						</div>
-						<div class="acard soon reveal">
-							<div class="aglyph">BE</div>
-							<div>
-								<div class="acode">BENJI</div>
-								<div class="aname">
-									Franklin OnChain money fund · Franklin Templeton
-								</div>
-							</div>
-							<span class="abadge soon">Coming soon</span>
-						</div>
-						<div class="acard soon reveal">
-							<div class="aglyph">EC</div>
-							<div>
-								<div class="acode">EURC</div>
-								<div class="aname">Euro Coin · Circle</div>
-							</div>
-							<span class="abadge soon">Coming soon</span>
-						</div>
-					</div>
+					<!-- Rendered by src/landing.ts from the SAME config the dApp uses,
+					     so this list can never drift from the app's directory. -->
+					<div class="assetgrid" id="assetGrid"></div>
 					<p class="rnote reveal">
 						Authline isn’t built around one token.
 						<b>Any issuer can list a Stellar asset</b> by publishing a small,
@@ -1212,63 +1142,8 @@
 			</div>
 		</footer>
 
+		<!-- Asset grid + hero card data, shared with the dApp's config. -->
 		<script>
-			// Mock: cycle the hero card through real assets, and let Activate play out.
-			const ASSETS = [
-				{
-					code: "EURCV",
-					glyph: "EU",
-					name: "EUR CoinVertible",
-					issuer: "by Société Générale-Forge",
-				},
-				{ code: "USDC", glyph: "US", name: "USD Coin", issuer: "by Circle" },
-				{
-					code: "BENJI",
-					glyph: "BE",
-					name: "Franklin OnChain",
-					issuer: "by Franklin Templeton",
-				},
-				{ code: "EURC", glyph: "EC", name: "Euro Coin", issuer: "by Circle" },
-			]
-			let mi = 0,
-				busy = false
-			const $ = (id) => document.getElementById(id)
-			function paint(a) {
-				$("mGlyph").textContent = a.glyph
-				$("mName").textContent = a.name
-				$("mIssuer").textContent = a.issuer
-				$("mCode").textContent = a.code
-				$("mBtnText").textContent = "Activate " + a.code
-				$("mDoneCode").textContent = a.code
-			}
-			const cyc = setInterval(() => {
-				if (busy) return
-				mi = (mi + 1) % ASSETS.length
-				const card = $("mock")
-				card.style.transition = "opacity .28s"
-				card.style.opacity = ".0"
-				setTimeout(() => {
-					paint(ASSETS[mi])
-					card.style.opacity = "1"
-				}, 280)
-			}, 3200)
-			$("mBtn").addEventListener("click", () => {
-				if (busy) return
-				busy = true
-				const t = $("mBtnText")
-				t.textContent = "Confirm in your wallet…"
-				setTimeout(() => {
-					$("mBtn").style.display = "none"
-					$("mDone").style.display = "flex"
-					setTimeout(() => {
-						$("mBtn").style.display = "flex"
-						$("mDone").style.display = "none"
-						paint(ASSETS[mi])
-						busy = false
-					}, 2600)
-				}, 1100)
-			})
-
 			// Scroll reveal with light stagger.
 			const io = new IntersectionObserver(
 				(es) => {
