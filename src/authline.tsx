@@ -1393,6 +1393,25 @@ export function AuthlineApp() {
 	const busy =
 		phase === "building" || phase === "signing" || phase === "submitting"
 
+	// Disconnect and reopen the wallet picker — the only way to switch accounts
+	// for wallets that cache the selection (e.g. Nido picks the account at
+	// CONNECT time; the sign popup is bound to it — see theahaco/nido#89).
+	// Keeps the selected asset; the new connection re-reads its status.
+	const switchWallet = () => {
+		if (busy) return // never abandon a transaction mid-flight
+		statusGen.current++
+		isConnected.current = false
+		smartPrep.current = null
+		void StellarWalletsKit.disconnect().catch(() => {})
+		setAddress("")
+		setStatus(null)
+		setHash(null)
+		setErrMsg("")
+		setTrustlineOnly(false)
+		setPhase(phase === "directory" ? "directory" : "idle")
+		setShowModal(true)
+	}
+
 	let body: React.ReactNode = null
 	if (phase === "directory") {
 		body = <Directory onPick={pick} />
@@ -2130,9 +2149,23 @@ export function AuthlineApp() {
 						Docs
 					</a>
 					{connected ? (
-						<Pill>
-							<Dot color={AL.emeraldBright} /> {short(address)}
-						</Pill>
+						<button
+							className="al-cta"
+							onClick={switchWallet}
+							disabled={busy}
+							aria-label="Switch wallet"
+							title="Switch wallet"
+							style={{
+								background: "none",
+								border: "none",
+								padding: 0,
+								cursor: busy ? "default" : "pointer",
+							}}
+						>
+							<Pill>
+								<Dot color={AL.emeraldBright} /> {short(address)} ⇄
+							</Pill>
+						</button>
 					) : (
 						<Pill>
 							<Dot color={AL.emerald} /> {IS_PUBLIC ? "Mainnet" : "Testnet"}

@@ -38,3 +38,33 @@ test("the wallet modal offers Nido on testnet builds", async ({ page }) => {
 	await page.getByRole("button", { name: /Connect wallet/i }).click()
 	await expect(page.getByRole("button", { name: /Nido/ })).toBeVisible()
 })
+
+test("the connected header pill switches wallets (disconnect + picker)", async ({
+	page,
+}) => {
+	const { Keypair } = await import("@stellar/stellar-sdk")
+	const holder = Keypair.random()
+	// Seam-connect (no funding needed: a missing account previews as not
+	// activated and still counts as a connected wallet).
+	await page.addInitScript((address) => {
+		;(globalThis as unknown as { __AUTHLINE_E2E__: unknown }).__AUTHLINE_E2E__ =
+			{
+				address,
+				async signTransaction(xdr: string) {
+					return { signedTxXdr: xdr }
+				},
+			}
+	}, holder.publicKey())
+	await page.goto("/app.html?asset=EURCV")
+	await page.getByRole("button", { name: /Connect wallet/i }).click()
+	// Connected: the header pill shows the address and is a switch button.
+	const pill = page.getByRole("button", { name: "Switch wallet" })
+	await expect(pill).toBeVisible()
+	await pill.click()
+	// Disconnected + wallet picker reopened (Nido listed) — see nido#89 for
+	// why this affordance must live in the dApp.
+	await expect(
+		page.getByText("Connect a wallet", { exact: true }),
+	).toBeVisible()
+	await expect(page.getByRole("button", { name: /Nido/ })).toBeVisible()
+})
