@@ -1,0 +1,15 @@
+# SEP-1 stellar.toml for authline.io — the Authline dApp.
+#
+# Authline is NOT an asset issuer: this domain issues no assets, so there is
+# no [[CURRENCIES]] section and no issuer-side [TRUSTLINE_ONBOARDER] block.
+# Issuers publish [TRUSTLINE_ONBOARDER] in their own stellar.toml — see the
+# Trustline Onboarder SEP draft in this repo: sep/SEP-XXXX-trustline-onboarder.md
+# (https://github.com/theahaco/stellar-assets/blob/main/sep/SEP-XXXX-trustline-onboarder.md)
+
+VERSION = "2.7.0"
+
+[DOCUMENTATION]
+ORG_NAME = "Aha Labs"
+ORG_URL = "https://authline.io"
+ORG_GITHUB = "theahaco"
+ORG_DESCRIPTION = "Authline: one-signature Stellar trustline activation — the reference deployment of the Trustline Onboarder SEP."
