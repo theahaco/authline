@@ -1973,6 +1973,28 @@ export function AuthlineApp() {
 							{errMsg ||
 								"The transaction was rejected. Nothing was submitted to the network."}
 						</div>
+						{/* OZ smart accounts: a policy-less rule with N passkeys is
+						    N-of-N — a single-passkey wallet ceremony can then never
+						    authorize. Decode the raw HostError for the user. */}
+						{isSmartAccount(address) &&
+							/UnvalidatedContext|Contract, #3002/.test(errMsg) && (
+								<div
+									style={{
+										fontFamily: AL.disp,
+										fontSize: 12.5,
+										lineHeight: 1.45,
+										color: AL.mut,
+										marginTop: 8,
+									}}
+								>
+									Your smart account rejected the single-passkey signature
+									(error #3002). This usually means its default rule lists
+									several passkeys without a threshold policy, so ALL of them
+									must sign. In your Nido wallet&apos;s security settings,
+									remove the extra passkey or add a 1-of-N policy to the default
+									rule, then retry.
+								</div>
+							)}
 					</div>
 				</div>
 				<div style={{ display: "flex", gap: 10 }}>
