@@ -45,6 +45,7 @@ test("EURCV is live in the USDC build's directory and activates end-to-end", asy
 	await installSigner(page, holder)
 
 	await page.goto("/app.html")
+	await page.getByRole("button", { name: "Close" }).click()
 	// Every registry-pinned testnet asset is a live tile.
 	await expect(page.getByRole("button", { name: /^EC EURC / })).toBeEnabled()
 	await expect(page.getByRole("button", { name: /^BL BLND / })).toBeEnabled()
@@ -69,6 +70,10 @@ test("EURCV is live in the USDC build's directory and activates end-to-end", asy
 	// Connect step), and the freshly activated EURCV reads as authorized.
 	await page.getByRole("button", { name: /All assets/ }).click()
 	await expect(page.getByText(/Supported assets/i)).toBeVisible()
+	// Directory badge reflects the fresh activation — no tile click needed.
+	await expect(
+		page.getByRole("button", { name: /^EV EURCV / }).getByText("Authorized"),
+	).toBeVisible({ timeout: 60_000 })
 	await page.getByRole("button", { name: /^US USDC / }).click()
 	await expect(
 		page.getByRole("button", { name: /Activate USDC · 1 signature/ }),
@@ -76,6 +81,32 @@ test("EURCV is live in the USDC build's directory and activates end-to-end", asy
 	await page.getByRole("button", { name: /All assets/ }).click()
 	await page.getByRole("button", { name: /^EV EURCV / }).click()
 	await expect(page.getByText(/You’re all set/)).toBeVisible()
+})
+
+test("connecting from the auto-opened modal stays on the directory and fills the badges", async ({
+	page,
+}) => {
+	const holder = Keypair.random()
+	await fund(holder.publicKey())
+	await installSigner(page, holder)
+
+	await page.goto("/app.html")
+	// Connect-on-open: the picker is already up — pick a wallet (the e2e seam
+	// intercepts inside connect()).
+	await page.getByRole("button", { name: /Freighter/ }).click()
+	// Connected FROM the directory → stay on the directory…
+	await expect(page.getByText(/Supported assets/i)).toBeVisible()
+	// …and every live tile gets its wallet badge: a fresh G-account holds
+	// nothing, so all five read "Not active" — visible without any tile click.
+	await expect(page.getByText("Not active")).toHaveCount(5, {
+		timeout: 60_000,
+	})
+
+	// Switching wallets clears the outgoing wallet's badges (they belong to
+	// the address): tiles fall back to the plain "Live" pill.
+	await page.getByRole("button", { name: "Switch wallet" }).click()
+	await page.getByRole("button", { name: "Close" }).click()
+	await expect(page.getByText("Not active")).toHaveCount(0)
 })
 
 test("EURC (Circle's official testnet asset, open) activates from the directory", async ({
@@ -86,6 +117,7 @@ test("EURC (Circle's official testnet asset, open) activates from the directory"
 	await installSigner(page, holder)
 
 	await page.goto("/app.html")
+	await page.getByRole("button", { name: "Close" }).click()
 	await page.getByRole("button", { name: /^EC EURC / }).click()
 	await page.getByRole("button", { name: /Connect wallet/i }).click()
 	await page
@@ -115,5 +147,6 @@ test("an unknown ?asset= code falls back to the directory", async ({
 	page,
 }) => {
 	await page.goto("/app.html?asset=NOPE")
+	await page.getByRole("button", { name: "Close" }).click()
 	await expect(page.getByText(/Supported assets/i)).toBeVisible()
 })
