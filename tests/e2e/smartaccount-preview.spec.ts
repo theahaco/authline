@@ -16,9 +16,22 @@ test("?address= preview of a smart account on a regulated asset: not authorized 
 	await expect(page.getByText("● Smart account")).toBeVisible({
 		timeout: 60_000,
 	})
+	// A valid ?address= preview carries its own wallet context — the
+	// connect-on-open modal must NOT cover it.
+	await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0)
 	await expect(page.getByText("Not needed")).toBeVisible() // trustline row
 	// The SAC view must actually read UNauthorized — not just render the row.
 	await expect(page.getByText("No", { exact: true })).toBeVisible()
+
+	// The previewed wallet's state also badges the whole DIRECTORY: open
+	// assets read authorized for a contract holder, regulated ones don't.
+	await page.getByRole("button", { name: /All assets/ }).click()
+	await expect(
+		page.getByRole("button", { name: /^EV EURCV / }).getByText("Not active"),
+	).toBeVisible({ timeout: 60_000 })
+	await expect(
+		page.getByRole("button", { name: /^US USDC / }).getByText("Authorized"),
+	).toBeVisible({ timeout: 60_000 })
 })
 
 test("?address= preview of a smart account on an open asset: already authorized", async ({
@@ -33,10 +46,20 @@ test("?address= preview of a smart account on an open asset: already authorized"
 	await expect(page.getByText("● Smart account")).toBeVisible()
 })
 
-test("the wallet modal offers Nido on testnet builds", async ({ page }) => {
+test("the wallet modal opens on load and offers Nido on testnet builds", async ({
+	page,
+}) => {
+	// Connect-on-open: no click needed — the picker is already up.
 	await page.goto("/app.html?asset=EURCV")
-	await page.getByRole("button", { name: /Connect wallet/i }).click()
+	await expect(
+		page.getByText("Connect a wallet", { exact: true }),
+	).toBeVisible()
 	await expect(page.getByRole("button", { name: /Nido/ })).toBeVisible()
+	// Dismissible: browsing stays possible, header keeps a Connect button.
+	await page.getByRole("button", { name: "Close" }).click()
+	await expect(
+		page.getByRole("button", { name: "Connect", exact: true }),
+	).toBeVisible()
 })
 
 test("the connected header pill switches wallets (disconnect + picker)", async ({
@@ -56,7 +79,9 @@ test("the connected header pill switches wallets (disconnect + picker)", async (
 			}
 	}, holder.publicKey())
 	await page.goto("/app.html?asset=EURCV")
-	await page.getByRole("button", { name: /Connect wallet/i }).click()
+	// The auto-opened picker is up; a wallet row click connects (the e2e seam
+	// intercepts inside connect()).
+	await page.getByRole("button", { name: /Nido/ }).click()
 	// Connected: the header pill shows the address and is a switch button.
 	const pill = page.getByRole("button", { name: "Switch wallet" })
 	await expect(pill).toBeVisible()

@@ -170,7 +170,7 @@ function Pill({
 	accent,
 }: {
 	children: React.ReactNode
-	tone?: "mut" | "err"
+	tone?: "mut" | "err" | "warn"
 	accent?: boolean
 }) {
 	const map = {
@@ -180,6 +180,11 @@ function Pill({
 			bg: "rgba(181,83,46,0.12)",
 			fg: "#B5532E",
 			bd: "rgba(181,83,46,0.35)",
+		},
+		warn: {
+			bg: "rgba(183,121,31,0.10)",
+			fg: "#B7791F",
+			bd: "rgba(183,121,31,0.35)",
 		},
 	} as const
 	const c = map[accent ? "accent" : tone]
@@ -525,9 +530,21 @@ function WalletModal({
 	onClose: () => void
 	available: Set<string>
 }) {
+	// Now that the modal can open unprompted (connect-on-open), it needs real
+	// dialog semantics: Escape closes it like the backdrop/× do.
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") onClose()
+		}
+		window.addEventListener("keydown", onKey)
+		return () => window.removeEventListener("keydown", onKey)
+	}, [onClose])
 	return (
 		<div
 			onClick={onClose}
+			role="dialog"
+			aria-modal="true"
+			aria-label="Connect a wallet"
 			style={{
 				position: "absolute",
 				inset: 0,
@@ -574,6 +591,7 @@ function WalletModal({
 					<button
 						className="al-cta"
 						onClick={onClose}
+						aria-label="Close"
 						style={{
 							width: 28,
 							height: 28,
@@ -810,7 +828,57 @@ function Card({ children }: { children: React.ReactNode }) {
 	)
 }
 
-function Directory({ onPick }: { onPick: (a: DirItem) => void }) {
+/** Whether a status read means "this holder is authorized for the asset". */
+const isAuthorizedStatus = (st: ActivationStatus): boolean =>
+	st.holderKind === "contract" ? !!st.sacAuthorized : st.isAuthorized
+
+/** The per-tile wallet badge: live activation state at a glance. */
+function DirStatusPill({ st }: { st: ActivationStatus | "loading" }) {
+	if (st === "loading")
+		return (
+			<span title="Checking this asset for your wallet…">
+				<Pill>
+					<Spinner size={10} /> …
+				</Pill>
+			</span>
+		)
+	if (!classicReadOk(st))
+		return (
+			<span title="Could not read this asset's status — try reconnecting">
+				<Pill>—</Pill>
+			</span>
+		)
+	if (isAuthorizedStatus(st))
+		return (
+			<Pill accent>
+				<Dot /> Authorized
+			</Pill>
+		)
+	if (st.isAuthorizedToMaintainLiabilities)
+		return (
+			<span title="Partially authorized (maintain liabilities only) — e.g. frozen">
+				<Pill tone="warn">
+					<Dot color="#B7791F" /> Partial
+				</Pill>
+			</span>
+		)
+	if (st.hasTrustline)
+		return (
+			<Pill tone="warn">
+				<Dot color="#B7791F" /> Trustline only
+			</Pill>
+		)
+	return <Pill>Not active</Pill>
+}
+
+function Directory({
+	onPick,
+	statuses,
+}: {
+	onPick: (a: DirItem) => void
+	/** Per-asset status for the connected/previewed wallet; absent = show "Live". */
+	statuses?: Record<string, ActivationStatus | "loading">
+}) {
 	return (
 		<div className="al-fade">
 			<div
@@ -897,9 +965,13 @@ function Directory({ onPick }: { onPick: (a: DirItem) => void }) {
 								}}
 							>
 								{live ? (
-									<Pill accent>
-										<Dot /> Live
-									</Pill>
+									statuses?.[a.code] !== undefined ? (
+										<DirStatusPill st={statuses[a.code]!} />
+									) : (
+										<Pill accent>
+											<Dot /> Live
+										</Pill>
+									)
 								) : (
 									<Pill>Soon</Pill>
 								)}
@@ -1036,6 +1108,57 @@ export function AuthlineApp() {
 		holder: string
 		expiresAt: number
 	} | null>(null)
+	// Per-asset activation status for the connected (or previewed) wallet,
+	// shown as directory badges. Keyed by asset code; "loading" while a read is
+	// in flight. Guarded by its OWN generation (dirGen): unlike statusGen it
+	// must survive pick()/activate() bumps — badges belong to the ADDRESS, not
+	// to the selected asset.
+	const [dirStatuses, setDirStatuses] = useState<
+		Record<string, ActivationStatus | "loading">
+	>({})
+	const dirGen = useRef(0)
+	// Origin of the last FAILED connect — routes a retry back to the directory
+	// instead of dumping the user into the default asset's flow.
+	const failedFromDirectory = useRef(false)
+	const loadDirectoryStatuses = useCallback(
+		(addr: string): Record<string, Promise<ActivationStatus>> => {
+			const gen = ++dirGen.current
+			setDirStatuses(
+				Object.fromEntries(LIVE_ASSETS.map((a) => [a.assetCode, "loading"])),
+			)
+			const reads: Record<string, Promise<ActivationStatus>> = {}
+			for (const a of LIVE_ASSETS) {
+				const read = fetchStatus(addr, a)
+				reads[a.assetCode] = read
+				read
+					.then((st) => {
+						if (gen !== dirGen.current) return
+						// Fill only while still "loading": a fresher write (e.g. the
+						// post-activation merge in refreshStatus) must never be
+						// clobbered by a slow connect-time read resolving late.
+						setDirStatuses((prev) =>
+							prev[a.assetCode] === "loading"
+								? { ...prev, [a.assetCode]: st }
+								: prev,
+						)
+					})
+					.catch(() => {
+						// Defensive only — the SDK resolves with readError on transient
+						// failures (rendered as "—") and rejects solely on static
+						// misconfiguration. Drop the spinner if it ever happens.
+						if (gen !== dirGen.current) return
+						setDirStatuses((prev) => {
+							if (prev[a.assetCode] !== "loading") return prev
+							const next = { ...prev }
+							delete next[a.assetCode]
+							return next
+						})
+					})
+			}
+			return reads
+		},
+		[],
+	)
 	const [available, setAvailable] = useState<Set<string>>(new Set())
 	// wallet availability for the modal detection dots
 	useEffect(() => {
@@ -1060,6 +1183,7 @@ export function AuthlineApp() {
 		if (a && (isValidIssuer(a) || StrKey.isValidContract(a))) {
 			const gen = statusGen.current
 			setAddress(a)
+			loadDirectoryStatuses(a) // badge the directory for the previewed wallet
 			fetchStatus(a, asset)
 				.then((st) => {
 					if (cancelled || gen !== statusGen.current) return
@@ -1088,6 +1212,28 @@ export function AuthlineApp() {
 		// Mount-only by design: the preview reads the URL-selected (or default)
 		// asset once. Re-running on tile picks would clobber the picked phase
 		// with a stale ?address= preview.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Connect-on-open: prompt for a wallet immediately so the directory shows
+	// what's already authorized — instead of making users click into every
+	// asset to find out. Dismissible (the header Connect button remains), once
+	// per session (no nagging on every reload); a VALID ?address= preview
+	// already carries its own wallet context (same validation as the preview
+	// effect — a malformed param must not silently suppress the prompt).
+	useEffect(() => {
+		const a = new URLSearchParams(window.location.search).get("address")
+		if (a && (isValidIssuer(a) || StrKey.isValidContract(a))) return
+		if (isConnected.current || address) return
+		const KEY = "authline:connect-prompted"
+		try {
+			if (sessionStorage.getItem(KEY)) return
+			sessionStorage.setItem(KEY, "1")
+		} catch {
+			// storage unavailable (e.g. blocked) — still prompt
+		}
+		setShowModal(true)
+		// Mount-only: re-running would reopen the modal on every state change.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
@@ -1137,6 +1283,13 @@ export function AuthlineApp() {
 			// for the previous address must not pair with the new one), and close the
 			// modal up front so a stalled wallet popup can't spawn a second connect.
 			const gen = ++statusGen.current
+			// Connecting from the DIRECTORY (auto-modal / header Connect) returns
+			// to the directory so the badges are the payoff — only an asset-first
+			// flow (?asset deep link, tile pick) routes into that asset's screen.
+			// A retry from a directory-origin connect failure counts as directory.
+			const fromDirectory =
+				phase === "directory" ||
+				(phase === "error" && !address && failedFromDirectory.current)
 			setShowModal(false)
 			try {
 				const e2e = e2eSigner()
@@ -1157,15 +1310,24 @@ export function AuthlineApp() {
 				isConnected.current = true
 				setAddress(addr)
 				setStatus(null)
-				const st = await fetchStatus(addr, asset)
+				// Fill the directory badges in parallel; the selected asset's read is
+				// part of that burst — reuse it instead of issuing a duplicate.
+				const reads = loadDirectoryStatuses(addr)
+				const st = await (reads[asset.assetCode] ?? fetchStatus(addr, asset))
 				if (gen !== statusGen.current) return
 				if (classicReadOk(st)) {
 					setStatus(st)
-					setPhase(phaseFor(st, asset))
-					// Pre-build the smart-account activation so the eventual click
-					// opens the wallet popup within the user-activation window.
-					if (st.holderKind === "contract" && !st.sacAuthorized)
-						void prepareSmartActivation(addr, asset)
+					if (fromDirectory) {
+						setPhase("directory")
+					} else {
+						setPhase(phaseFor(st, asset))
+						// Pre-build the smart-account activation so the eventual click
+						// opens the wallet popup within the user-activation window.
+						if (st.holderKind === "contract" && !st.sacAuthorized)
+							void prepareSmartActivation(addr, asset)
+					}
+				} else if (fromDirectory) {
+					setPhase("directory")
 				} else {
 					// Unknown ledger state: offer the normal activate flow (the router
 					// call is idempotent) instead of asserting "no trustline".
@@ -1176,15 +1338,21 @@ export function AuthlineApp() {
 				if (gen !== statusGen.current) return
 				// The kit's selected module already switched — without a rollback,
 				// "Try again" would pair the PREVIOUS address with the NEW module
-				// (wrong-wallet signing). Clear the pairing instead.
+				// (wrong-wallet signing). Clear the pairing instead — INCLUDING the
+				// badge map, which may still describe a previewed/previous address.
 				isConnected.current = false
+				dirGen.current++
+				setDirStatuses({})
 				setAddress("")
 				setStatus(null)
+				// Remember the origin: a retry-connect from this error screen should
+				// land back where the user started (directory vs asset flow).
+				failedFromDirectory.current = fromDirectory
 				setErrMsg(e instanceof Error ? e.message : String(e))
 				setPhase("error")
 			}
 		},
-		[asset, prepareSmartActivation],
+		[asset, phase, address, prepareSmartActivation, loadDirectoryStatuses],
 	)
 
 	const pick = (t: DirItem) => {
@@ -1202,7 +1370,15 @@ export function AuthlineApp() {
 			setPhase("idle")
 			return
 		}
-		setPhase("ready") // provisional while the per-asset status loads
+		// Seed from the directory badge when available: a tile already marked
+		// "Authorized" must not flash the provisional Activate screen.
+		const seed = dirStatuses[t.code]
+		if (seed && seed !== "loading" && classicReadOk(seed)) {
+			setStatus(seed)
+			setPhase(phaseFor(seed, next))
+		} else {
+			setPhase("ready") // provisional while the per-asset status loads
+		}
 		fetchStatus(address, next)
 			.then((st) => {
 				if (gen !== statusGen.current || !classicReadOk(st)) return
@@ -1256,6 +1432,12 @@ export function AuthlineApp() {
 				const st = await fetchStatus(account, a)
 				if (gen !== statusGen.current || !classicReadOk(st)) return null
 				setStatus(st)
+				// Keep the directory badge for this asset in step (e.g. right after
+				// a successful activation). Map-level guard (not per-key) so a badge
+				// entry dropped by a failed read can still recover here.
+				setDirStatuses((prev) =>
+					Object.keys(prev).length > 0 ? { ...prev, [a.assetCode]: st } : prev,
+				)
 				return st
 			} catch {
 				return null
@@ -1400,11 +1582,13 @@ export function AuthlineApp() {
 	const switchWallet = () => {
 		if (busy) return // never abandon a transaction mid-flight
 		statusGen.current++
+		dirGen.current++ // the badges belong to the outgoing wallet
 		isConnected.current = false
 		smartPrep.current = null
 		void StellarWalletsKit.disconnect().catch(() => {})
 		setAddress("")
 		setStatus(null)
+		setDirStatuses({})
 		setHash(null)
 		setErrMsg("")
 		setTrustlineOnly(false)
@@ -1414,7 +1598,12 @@ export function AuthlineApp() {
 
 	let body: React.ReactNode = null
 	if (phase === "directory") {
-		body = <Directory onPick={pick} />
+		body = (
+			<Directory
+				onPick={pick}
+				statuses={Object.keys(dirStatuses).length > 0 ? dirStatuses : undefined}
+			/>
+		)
 	} else if (phase === "idle") {
 		body = (
 			<div className="al-fade">
@@ -2167,9 +2356,28 @@ export function AuthlineApp() {
 							</Pill>
 						</button>
 					) : (
-						<Pill>
-							<Dot color={AL.emerald} /> {IS_PUBLIC ? "Mainnet" : "Testnet"}
-						</Pill>
+						<>
+							<button
+								className="al-cta"
+								onClick={() => setShowModal(true)}
+								style={{
+									background: AL.emerald,
+									color: "#FFFFFF",
+									border: "none",
+									cursor: "pointer",
+									fontFamily: AL.disp,
+									fontWeight: 600,
+									fontSize: 13,
+									padding: "7px 14px",
+									borderRadius: 999,
+								}}
+							>
+								Connect
+							</button>
+							<Pill>
+								<Dot color={AL.emerald} /> {IS_PUBLIC ? "Mainnet" : "Testnet"}
+							</Pill>
+						</>
 					)}
 				</div>
 			</div>

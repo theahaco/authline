@@ -43,6 +43,7 @@ test("activate an AUTH_REQUIRED (TLO) trustline through the dApp via one-step di
 	}, holder.publicKey())
 
 	await page.goto("/tlo/app.html")
+	await page.getByRole("button", { name: "Close" }).click()
 	// Directory → pick the TLO (live) tile
 	await page.getByRole("button", { name: /TLO/ }).first().click()
 	// Idle → Connect (the e2e seam connects directly, skipping the modal)

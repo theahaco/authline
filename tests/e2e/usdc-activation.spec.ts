@@ -39,6 +39,7 @@ test("activate a USDC trustline through the dApp", async ({ page }) => {
 	}, holder.publicKey())
 
 	await page.goto("/app.html")
+	await page.getByRole("button", { name: "Close" }).click()
 	// Directory → pick the USDC (live) tile
 	await page.getByRole("button", { name: /USDC/ }).first().click()
 	// Idle → Connect (the e2e seam connects directly, skipping the modal)
