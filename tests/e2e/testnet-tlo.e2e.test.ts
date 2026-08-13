@@ -65,14 +65,15 @@ describe.skipIf(!RUN)("testnet TLO discovery onboard (real chain)", () => {
 			await sleep(1500)
 			got = await server.getTransaction(sent.hash)
 		}
-		if (got.status === "NOT_FOUND")
-			throw new Error("onboard tx not confirmed within deadline")
 		// Print the on-chain evidence link (milestone D1.1 asks for one
 		// onboarding of each asset type visible on Stellar Expert).
 		console.log(
 			`TLO onboard tx: https://stellar.expert/explorer/testnet/tx/${sent.hash}`,
 		)
-		expect(got.status).toBe("SUCCESS")
+		// A non-SUCCESS terminal state (NOT_FOUND past the deadline, or FAILED)
+		// fails here; the check also narrows `got` for `returnValue` below.
+		if (got.status !== "SUCCESS")
+			throw new Error(`onboard tx did not succeed: ${got.status}`)
 		// The router's own verdict, decoded from the real chain return value —
 		// guards the wire shape `decodeOnboardStatus` assumes (the app treats a
 		// non-"Authorized" decode as trustline-only).
