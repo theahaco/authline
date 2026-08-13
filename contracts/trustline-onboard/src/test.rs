@@ -79,6 +79,29 @@ fn setup(env: &Env, auth_required: bool) -> (Address, Address) {
     (sac.address(), router)
 }
 
+/// A real on-ledger `G`-account usable as a holder: the issuer of a second,
+/// unrelated asset. Needed wherever a test asserts on an actual classic
+/// trustline — `Address::generate` yields C-addresses, for which CAP-73
+/// `trust()` is a no-op.
+fn g_account(env: &Env) -> Address {
+    env.register_stellar_asset_contract_v2(Address::generate(env))
+        .issuer()
+        .address()
+}
+
+/// Does `holder` have a classic trustline for `sac`? Probed with the
+/// admin-only `set_authorized`, which the SAC rejects when the trustline is
+/// missing. This is the only DISCRIMINATING read available here:
+/// `authorized()` is false both for "no trustline" and "trustline, not
+/// authorized", so it cannot on its own prove a rollback.
+///
+/// Side effect: on success the holder ends up authorized — call it last.
+fn has_trustline(env: &Env, sac: &Address, holder: &Address) -> bool {
+    StellarAssetClient::new(env, sac)
+        .try_set_authorized(holder, &true)
+        .is_ok()
+}
+
 #[test]
 fn open_asset_onboards_to_authorized() {
     let env = Env::default();
@@ -129,21 +152,55 @@ fn discovers_and_authorizes_via_admin_contract() {
 }
 
 #[test]
+fn regulated_g_account_gets_a_real_authorized_trustline() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (sac, router) = setup(&env, true);
+    // A real G-account, so `trust()` creates an actual classic trustline (the
+    // AUTH_REQUIRED success path end-to-end, not just discovery).
+    let holder = g_account(&env);
+    let sac_client = StellarAssetClient::new(&env, &sac);
+    sac_client.set_admin(&env.register(StubAuthorizer, (sac.clone(),)));
+
+    let status = TrustlineOnboardClient::new(&env, &router).onboard(&sac, &holder);
+
+    assert_eq!(status, OnboardStatus::Authorized);
+    assert!(sac_client.authorized(&holder));
+    assert!(has_trustline(&env, &sac, &holder));
+}
+
+#[test]
 fn typed_rejection_reverts_everything() {
     let env = Env::default();
     env.mock_all_auths_allowing_non_root_auth();
-    let holder = Address::generate(&env);
     let (sac, router) = setup(&env, true);
-
-    let authorizer = env.register(FailingAuthorizer, ());
-    StellarAssetClient::new(&env, &sac).set_admin(&authorizer);
+    // A real G-account holder is REQUIRED here: `trust()` no-ops for a
+    // generated C-address, so the rollback assertion below would be vacuously
+    // true (nothing was ever created to roll back).
+    let holder = g_account(&env);
+    let sac_client = StellarAssetClient::new(&env, &sac);
+    sac_client.set_admin(&env.register(FailingAuthorizer, ()));
 
     assert_eq!(
         TrustlineOnboardClient::new(&env, &router).try_onboard(&sac, &holder),
         Err(Ok(Error::AuthorizationRefused))
     );
-    // The whole call (including trust) rolled back.
-    assert!(!StellarAssetClient::new(&env, &sac).authorized(&holder));
+    // The trustline `trust()` created inside the call is GONE: the whole
+    // transaction, trustline included, rolled back. `authorized()` no longer
+    // even answers — the SAC traps with "trustline entry is missing" — and the
+    // admin-side probe agrees.
+    assert!(sac_client.try_authorized(&holder).is_err());
+    assert!(!has_trustline(&env, &sac, &holder));
+
+    // Self-check that the probe above discriminates rather than always
+    // reporting false: the same holder/SAC pair DOES hold a trustline once the
+    // authorizer accepts.
+    sac_client.set_admin(&env.register(StubAuthorizer, (sac.clone(),)));
+    assert_eq!(
+        TrustlineOnboardClient::new(&env, &router).onboard(&sac, &holder),
+        OnboardStatus::Authorized
+    );
+    assert!(has_trustline(&env, &sac, &holder));
 }
 
 #[test]
@@ -213,14 +270,13 @@ fn g_account_holder_gets_real_trustline() {
     let env = Env::default();
     env.mock_all_auths_allowing_non_root_auth();
     let (sac, router) = setup(&env, false);
-    // The issuer of a SECOND asset is a real on-ledger account (G-address).
-    let other = env.register_stellar_asset_contract_v2(Address::generate(&env));
-    let holder = other.issuer().address();
+    let holder = g_account(&env);
 
     let status = TrustlineOnboardClient::new(&env, &router).onboard(&sac, &holder);
 
     assert_eq!(status, OnboardStatus::Authorized);
     assert!(StellarAssetClient::new(&env, &sac).authorized(&holder));
+    assert!(has_trustline(&env, &sac, &holder));
 }
 
 #[test]

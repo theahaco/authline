@@ -7,6 +7,7 @@ import {
 import {
 	ROUTERS,
 	buildOnboardTx,
+	decodeOnboardStatus,
 	getActivationStatus,
 	type OnboarderConfig,
 } from "@theaha/authline"
@@ -66,7 +67,16 @@ describe.skipIf(!RUN)("testnet TLO discovery onboard (real chain)", () => {
 		}
 		if (got.status === "NOT_FOUND")
 			throw new Error("onboard tx not confirmed within deadline")
+		// Print the on-chain evidence link (milestone D1.1 asks for one
+		// onboarding of each asset type visible on Stellar Expert).
+		console.log(
+			`TLO onboard tx: https://stellar.expert/explorer/testnet/tx/${sent.hash}`,
+		)
 		expect(got.status).toBe("SUCCESS")
+		// The router's own verdict, decoded from the real chain return value —
+		// guards the wire shape `decodeOnboardStatus` assumes (the app treats a
+		// non-"Authorized" decode as trustline-only).
+		expect(decodeOnboardStatus(got.returnValue)).toBe("Authorized")
 
 		// AUTH_REQUIRED + authorized==true proves the DISCOVERED authorize step
 		// ran — trust alone would leave isAuthorized false for TLO.

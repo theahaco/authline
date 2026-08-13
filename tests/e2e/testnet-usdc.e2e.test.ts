@@ -7,6 +7,7 @@ import {
 } from "@stellar/stellar-sdk"
 import {
 	buildOnboardTx,
+	decodeOnboardStatus,
 	getActivationStatus,
 	ROUTERS,
 	type OnboarderConfig,
@@ -71,7 +72,15 @@ describe.skipIf(!RUN)("testnet USDC onboard via router (real chain)", () => {
 		}
 		if (got.status === "NOT_FOUND")
 			throw new Error("trust tx not confirmed within deadline")
+		// Print the on-chain evidence link (milestone D1.1 asks for one
+		// onboarding of each asset type visible on Stellar Expert).
+		console.log(
+			`USDC onboard tx: https://stellar.expert/explorer/testnet/tx/${sent.hash}`,
+		)
 		expect(got.status).toBe("SUCCESS")
+		// The router's own verdict, decoded from the real chain return value —
+		// guards the wire shape `decodeOnboardStatus` assumes.
+		expect(decodeOnboardStatus(got.returnValue)).toBe("Authorized")
 
 		const st = await getActivationStatus({
 			rpcUrl: NET.rpcUrl,
