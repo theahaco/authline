@@ -161,7 +161,7 @@ env reproduces the wasm-host try-call classification (missing export / panic →
 Abort; typed error → contract error) — this is the design's one mechanical
 assumption that unit tests must confirm before building on it.
 
-## SDK changes (`@theaha/authline`)
+## SDK changes (`@theahaco/authline`)
 
 - `onboard.ts`: delete `buildTrustTx` + `BuildTrustOptions`; rewrite
   `buildOnboardTx` to invoke `router.onboard(sac, holder)`. Still returns

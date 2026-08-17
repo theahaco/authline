@@ -1,4 +1,4 @@
-# @theaha/authline
+# @theahaco/authline
 
 Integrator SDK for **one-signature trustline onboarding** via an on-chain
 discovery router. The router discovers on-chain (via the SAC admin) whether the
@@ -9,13 +9,13 @@ returns an `OnboardStatus` (`Authorized` | `TrustlineOnly`); decode it with
 treating tx success alone as full activation.
 
 ```bash
-npm install @theaha/authline
+npm install @theahaco/authline
 ```
 
 ## Discover an issuer's onboarder
 
 ```ts
-import { discoverOnboarder } from "@theaha/authline"
+import { discoverOnboarder } from "@theahaco/authline"
 
 // Reads https://theaha.co/.well-known/stellar.toml -> [TRUSTLINE_ONBOARDER].
 // Always pass `network` for any flow that builds a signed tx: the result is
@@ -32,7 +32,7 @@ const config = await discoverOnboarder("theaha.co", { network: passphrase })
 ## Build the one-signature transaction
 
 ```ts
-import { buildOnboardTx, ROUTERS } from "@theaha/authline"
+import { buildOnboardTx, ROUTERS } from "@theahaco/authline"
 import { Networks } from "@stellar/stellar-sdk"
 
 // Standalone testnet illustration (the discover() example above is mainnet EURCV).
@@ -49,7 +49,7 @@ const xdr = await buildOnboardTx({
 ## React
 
 ```tsx
-import { ActivateButton } from "@theaha/authline/react"
+import { ActivateButton } from "@theahaco/authline/react"
 ;<ActivateButton
 	holder={address}
 	config={config}

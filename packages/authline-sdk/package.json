@@ -1,5 +1,5 @@
 {
-  "name": "@theaha/authline",
+  "name": "@theahaco/authline",
   "version": "0.5.0",
   "description": "Integrator SDK for one-signature trustline onboarding via an on-chain discovery router (Trustline Onboarder / SEP draft v0.3).",
   "license": "Apache-2.0",

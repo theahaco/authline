@@ -1,15 +1,15 @@
 # Authline — integrator SDK + frontend rebrand
 
 This PR brings the **Authline** experience to `stellar-assets`: the
-`@theaha/authline` integrator SDK **and** the Authline landing page + activation
-dApp, wired together. The **backend is untouched** — same contracts
+`@theahaco/authline` integrator SDK **and** the Authline landing page +
+activation dApp, wired together. The **backend is untouched** — same contracts
 (`contracts/trustline-onboard`, `authorizer-stub`), the same onboarding logic
 (`src/hooks/useOnboard.ts`, `src/contracts/assets.ts`), and authorization still
 flows through the live `eurcv_auth`. Only the **frontend/design layer** changes.
 
 ## Two parts
 
-### 1. `packages/authline-sdk/` — the integrator SDK (`@theaha/authline`)
+### 1. `packages/authline-sdk/` — the integrator SDK (`@theahaco/authline`)
 
 A small TypeScript SDK that lets a **third party** (exchange / broker / wallet)
 establish a trustline **on behalf of a user** during a withdrawal — the core of

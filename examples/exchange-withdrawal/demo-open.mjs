@@ -23,7 +23,7 @@ import {
 	getActivationStatus,
 	buildSponsoredOnboardTx,
 	onboardingRequest,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 
 const NET = {
 	horizonUrl: "https://horizon-testnet.stellar.org",

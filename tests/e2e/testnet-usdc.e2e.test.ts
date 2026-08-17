@@ -11,7 +11,7 @@ import {
 	getActivationStatus,
 	ROUTERS,
 	type OnboarderConfig,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 import { beforeAll, describe, expect, it } from "vitest"
 
 const RUN = process.env.RUN_TESTNET_E2E === "1"

@@ -24,7 +24,7 @@ import {
 	buildSponsoredOnboardTx,
 	getActivationStatus,
 	onboardingRequest,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 
 const NET = {
 	rpcUrl: "https://soroban-testnet.stellar.org",
