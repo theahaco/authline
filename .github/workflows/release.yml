@@ -1,0 +1,102 @@
+name: Release
+
+# Publishes @theahaco/authline (packages/authline-sdk) to npm via
+# semantic-release: the version is computed from conventional-commit messages
+# since the last release tag (fix: → patch, feat: → minor, BREAKING CHANGE →
+# major). Commits without a conventional prefix release nothing.
+#
+# Adapted from theahaco/contract-explorer's release.yml for this repo's
+# npm-workspaces layout: install uses the committed lockfile (npm ci — this is
+# an app monorepo, not a bare library), and the publish targets the SDK
+# workspace via .releaserc.json's pkgRoot. The SDK's `prepack` script builds
+# dist/ during `npm publish`, so the release job needs no separate build step.
+#
+# Requires the NPM_TOKEN repository secret: a granular automation token with
+# read/write on @theahaco/authline (bypasses the account OTP requirement).
+
+on:
+  push:
+    branches:
+      - main
+    # Only SDK-touching pushes trigger a release. Commits that skipped the
+    # filter still appear in the next release's notes (semantic-release
+    # analyzes all commits since the last tag), which is acceptable noise.
+    paths:
+      - "packages/authline-sdk/**"
+      - ".releaserc.json"
+      - ".github/workflows/release.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # to be able to publish a GitHub release
+  issues: write # to be able to comment on released issues
+  pull-requests: write # to be able to comment on released pull requests
+  id-token: write # to enable use of OIDC for trusted publishing and npm provenance
+
+env:
+  PUBLIC_STELLAR_NETWORK: local # mirror build.yml so config tests resolve
+
+jobs:
+  validate:
+    name: 🔍 Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v5
+
+      - name: ⎔ Setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: 📥 Download deps
+        run: npm ci
+
+      - name: 🔍 Validate (build the SDK the way publish will)
+        run: npm run prepack -w @theahaco/authline
+
+      # Contract tests and the full app build gate PRs in build.yml; this
+      # revalidates only what the published package depends on.
+      - name: 🧪 Test
+        run: npm test
+
+  release:
+    name: 🚀 Release
+    needs: [validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v5
+
+      - name: ⎔ Setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: 📥 Download deps
+        run: npm ci
+
+      - name: ✍️ Verify signatures
+        run: npm audit signatures
+
+      - name: 🚀 Release
+        uses: cycjimmy/semantic-release-action@v6
+        with:
+          semantic_version: 25.0.3
+          branches: |
+            [
+              '+([0-9])?(.{+([0-9]),x}).x',
+              'main',
+              'next',
+              'next-major',
+              {name: 'beta', prerelease: true},
+              {name: 'alpha', prerelease: true}
+            ]
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
