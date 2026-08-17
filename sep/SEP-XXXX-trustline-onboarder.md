@@ -108,7 +108,7 @@ control.
 
 ### Two asset classes — do not assume the regulated model for all assets
 
-The standard explicitly serves two classes. The discovery router (§3) detects
+The standard explicitly serves two classes. The discovery router (§4) detects
 which applies **on-chain** — it runs the SAC admin's `authorize_trustline` for a
 regulated asset and skips it for an open one — so an integrator driving
 `onboard()` never branches on the class. On the classic sponsored path (§5, Case
@@ -640,6 +640,7 @@ VERSION = "0.3"
 ASSET_CODE = "USDC"
 ASSET_ISSUER = "G…"
 SAC = "C…"
+ONBOARD_WRAPPER = "C…"              # required: cap73-onesig is in BACKENDS
 # AUTHORIZER / POLICY omitted: asset is not AUTH_REQUIRED
 BACKENDS = ["cap33-sponsored", "cap73-onesig"]
 SPONSOR = "G…"
@@ -784,8 +785,8 @@ situational alternatives.
   transaction (Case C), and for a pre-existing unauthorized trustline it is
   **zero** signatures (Case A). Authorization policy is on-chain (Authorizer =
   SAC admin), so it is deterministic and auditable. This matches the live EURCV
-  model and the **merged** one-signature reference (`stellar-assets` PR #10), so
-  the standard is grounded in working code.
+  model and the **merged** one-signature reference (`authline` PR #10), so the
+  standard is grounded in working code.
 - **(b) Intermediate account** has the third party control a temporary account,
   trust + receive there, then forward. It unblocks the _exchange side_, but the
   **user still needs their own trustline** to finally hold the asset — so it
@@ -903,8 +904,8 @@ This SEP introduces no protocol change and is **purely additive**.
 ## Reference Implementation
 
 The public reference implementation (work in progress for SCF #44) is at
-[github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)
-(Apache-2.0).
+[github.com/theahaco/authline](https://github.com/theahaco/authline)
+(Apache-2.0; formerly `theahaco/stellar-assets`, which redirects).
 
 | Component                                                                                                                                                                                                                                                                          | Status                                         | Reference                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -914,7 +915,7 @@ The public reference implementation (work in progress for SCF #44) is at
 | Asset-agnostic **Trustline Authorizer** (testnet)                                                                                                                                                                                                                                  | **DEPLOYED + WORKING on testnet** (this grant) | `CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU`                                                                                                                                                                                                                                                                                                                                                                         |
 | **Trustline Onboard** CAP-73 wrapper (testnet)                                                                                                                                                                                                                                     | **SUPERSEDED** (v0.2, 3-arg interface)         | `CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5`. Replaced by the v0.3 discovery router — current testnet id is pinned in the SDK's `ROUTERS` registry (`packages/authline-sdk/src/registry.ts`).                                                                                                                                                                                                                        |
 | Test asset **TLO** (`AUTH_REQUIRED`) — SAC / issuer                                                                                                                                                                                                                                | testnet                                        | SAC `CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3`, issuer `GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U`                                                                                                                                                                                                                                                                                                  |
-| `@theaha/authline` integrator SDK (`discover`, `status`, `decodeOnboardStatus`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                   | [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)                                                                                                                                                                                                                                                                                                                                                   |
+| `@theaha/authline` integrator SDK (`discover`, `status`, `decodeOnboardStatus`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                   | [github.com/theahaco/authline](https://github.com/theahaco/authline)                                                                                                                                                                                                                                                                                                                                                               |
 
 #### Proven on testnet
 
