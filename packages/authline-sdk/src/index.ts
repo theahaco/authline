@@ -1,5 +1,5 @@
 /**
- * @theaha/authline
+ * @theahaco/authline
  *
  * Integrator SDK for establishing a Stellar trustline on behalf of a user.
  * Exchanges, brokers and wallets use this to onboard a holder during a

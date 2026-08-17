@@ -1003,7 +1003,7 @@ after the `ASSET.authorizer` assertion:
 
 ```ts
 // Router comes from the pinned registry when PUBLIC_ROUTER is unset.
-const { ROUTERS } = await import("@theaha/authline")
+const { ROUTERS } = await import("@theahaco/authline")
 expect(ASSET.router).toBe(ROUTERS.TESTNET)
 ```
 
@@ -1033,7 +1033,7 @@ Run: `npx vitest run src/config.test.ts` — Expected: FAIL (no `router` on
 
 - [ ] **Step 2: Update `src/config.ts`**
 
-1. Import `ROUTERS` from `@theaha/authline` (add to the existing import).
+1. Import `ROUTERS` from `@theahaco/authline` (add to the existing import).
 2. Hoist the network tag so both the registry lookup and routers use it (replace
    the inline `netFromPassphrase(...)` arg):
 
@@ -1075,7 +1075,7 @@ if (!ASSET.router)
 
 - [ ] **Step 3: Update `src/authline.tsx`**
 
-1. Remove `buildTrustTx` from the `@theaha/authline` import.
+1. Remove `buildTrustTx` from the `@theahaco/authline` import.
 2. Replace the `IS_OPEN` line with (capability is now authoritative — authorizer
    presence no longer implies anything):
 
@@ -1146,7 +1146,7 @@ import {
 	buildOnboardTx,
 	getActivationStatus,
 	type OnboarderConfig,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 ```
 
 2. `CONFIG` gains the router (env override first, pinned fallback):
@@ -1180,7 +1180,7 @@ import {
 	buildOnboardTx,
 	getActivationStatus,
 	type OnboarderConfig,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 import { beforeAll, describe, expect, it } from "vitest"
 
 const RUN = process.env.RUN_TESTNET_E2E === "1"

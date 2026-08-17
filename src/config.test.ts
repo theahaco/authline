@@ -30,7 +30,7 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSET.capability).toBe("open")
 		expect(ASSET.authorizer).toBe("")
 		// Router comes from the pinned registry when PUBLIC_ROUTER is unset.
-		const { ROUTERS } = await import("@theaha/authline")
+		const { ROUTERS } = await import("@theahaco/authline")
 		expect(ASSET.router).toBe(ROUTERS.TESTNET)
 		expect(ASSETS[0]).toMatchObject({ code: "USDC", status: "live" })
 	})
@@ -72,7 +72,7 @@ describe("config — testnet USDC (env-driven)", () => {
 			"CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
 		)
 		expect(eurcv?.capability).toBe("permissionedOneStep")
-		const { ROUTERS } = await import("@theaha/authline")
+		const { ROUTERS } = await import("@theahaco/authline")
 		expect(eurcv?.router).toBe(ROUTERS.TESTNET)
 	})
 
@@ -117,7 +117,7 @@ describe("config — testnet USDC (env-driven)", () => {
 		expect(ASSET.authorizer).toBe(
 			"CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU",
 		)
-		const { ROUTERS } = await import("@theaha/authline")
+		const { ROUTERS } = await import("@theahaco/authline")
 		expect(ASSET.router).toBe(ROUTERS.TESTNET)
 	})
 
@@ -153,7 +153,7 @@ describe("config — testnet USDC (env-driven)", () => {
 		// pinned-ROUTERS fallback (the "Activation unavailable" footgun).
 		vi.stubEnv("PUBLIC_ROUTER", "")
 		const { ASSET } = await import("./config")
-		const { ROUTERS } = await import("@theaha/authline")
+		const { ROUTERS } = await import("@theahaco/authline")
 		expect(ASSET.router).toBe(ROUTERS.TESTNET)
 		expect(ASSET.router).not.toBe("")
 	})

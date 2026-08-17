@@ -108,7 +108,7 @@ control.
 
 ### Two asset classes — do not assume the regulated model for all assets
 
-The standard explicitly serves two classes. The discovery router (§3) detects
+The standard explicitly serves two classes. The discovery router (§4) detects
 which applies **on-chain** — it runs the SAC admin's `authorize_trustline` for a
 regulated asset and skips it for an open one — so an integrator driving
 `onboard()` never branches on the class. On the classic sponsored path (§5, Case
@@ -512,7 +512,7 @@ standard interface_. See Design Rationale for why (a) is preferred over (b) an
 intermediate account and (c) claimable balances.
 
 > **Verification status.** The reference implementation ships the 2-arg
-> discovery router, delivered in this repo with a 16-test native suite (10
+> discovery router, delivered in this repo with a 17-test native suite (11
 > scenario + 6 environment-classification tests) plus opt-in testnet e2e for the
 > open (USDC) and discovery (TLO) paths (`tests/e2e/`); the testnet router id is
 > pinned in the SDK's `ROUTERS` registry. The native suite demonstrates that the
@@ -640,6 +640,7 @@ VERSION = "0.3"
 ASSET_CODE = "USDC"
 ASSET_ISSUER = "G…"
 SAC = "C…"
+ONBOARD_WRAPPER = "C…"              # required: cap73-onesig is in BACKENDS
 # AUTHORIZER / POLICY omitted: asset is not AUTH_REQUIRED
 BACKENDS = ["cap33-sponsored", "cap73-onesig"]
 SPONSOR = "G…"
@@ -659,7 +660,7 @@ SPONSOR = "G…"
 ### 7. Integrator interface and handoffs
 
 A conformant integrator implements the following surface (the reference
-implementation is the `@theaha/authline` TypeScript SDK):
+implementation is the `@theahaco/authline` TypeScript SDK):
 
 - `discover(toml)` — parse the issuer's `stellar.toml` `[TRUSTLINE_ONBOARDER]`
   block into a config. One config, any integrator.
@@ -784,8 +785,8 @@ situational alternatives.
   transaction (Case C), and for a pre-existing unauthorized trustline it is
   **zero** signatures (Case A). Authorization policy is on-chain (Authorizer =
   SAC admin), so it is deterministic and auditable. This matches the live EURCV
-  model and the **merged** one-signature reference (`stellar-assets` PR #10), so
-  the standard is grounded in working code.
+  model and the **merged** one-signature reference (`authline` PR #10), so the
+  standard is grounded in working code.
 - **(b) Intermediate account** has the third party control a temporary account,
   trust + receive there, then forward. It unblocks the _exchange side_, but the
   **user still needs their own trustline** to finally hold the asset — so it
@@ -903,18 +904,18 @@ This SEP introduces no protocol change and is **purely additive**.
 ## Reference Implementation
 
 The public reference implementation (work in progress for SCF #44) is at
-[github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)
-(Apache-2.0).
+[github.com/theahaco/authline](https://github.com/theahaco/authline)
+(Apache-2.0; formerly `theahaco/stellar-assets`, which redirects).
 
-| Component                                                                                                                                                                                                                                                                          | Status                                         | Reference                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `eurcv_auth` Trustline Authorizer (denylist, set as SAC admin; `authorize_trustline`, `add/remove_banned_accounts`, `freeze/unfreeze_accounts`, `deauthorize_trustline`, `clawback`, `mint_to_account`, `pause/unpause`, `upgrade`)                                                | **LIVE on mainnet**                            | `theahaco/eurcv_auth` (repo private — available on request); mainnet contract [`CB2DHZ…KSB3` on Stellar Expert](https://stellar.expert/explorer/public/contract/CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3); activation page `https://eurcv.theaha.co` (currently a two-step / two-transaction flow, not yet one-signature)                                                                                          |
-| `onboard()` one-signature discovery router over CAP-73 `trust()`                                                                                                                                                                                                                   | **DELIVERED in this repo** (this grant)        | `contracts/trustline-onboard` — `onboard(sac, holder)` with on-chain authorizer discovery (CAP-68 `get_address_executable` + `SAC.admin()`). Delivered: a 16-test native suite (10 scenario + 6 environment-classification tests) plus opt-in testnet e2e for the open (USDC) and discovery (TLO) paths (`tests/e2e/`); the testnet router id is pinned in the SDK's `ROUTERS` registry (`packages/authline-sdk/src/registry.ts`). |
-| Contract Admin SEP (`Administratable` + `Upgradable`) — built upon by §3                                                                                                                                                                                                           | Draft                                          | [github.com/theahaco/admin-sep](https://github.com/theahaco/admin-sep) (SDF discussion #1670)                                                                                                                                                                                                                                                                                                                                      |
-| Asset-agnostic **Trustline Authorizer** (testnet)                                                                                                                                                                                                                                  | **DEPLOYED + WORKING on testnet** (this grant) | `CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU`                                                                                                                                                                                                                                                                                                                                                                         |
-| **Trustline Onboard** CAP-73 wrapper (testnet)                                                                                                                                                                                                                                     | **SUPERSEDED** (v0.2, 3-arg interface)         | `CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5`. Replaced by the v0.3 discovery router — current testnet id is pinned in the SDK's `ROUTERS` registry (`packages/authline-sdk/src/registry.ts`).                                                                                                                                                                                                                        |
-| Test asset **TLO** (`AUTH_REQUIRED`) — SAC / issuer                                                                                                                                                                                                                                | testnet                                        | SAC `CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3`, issuer `GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U`                                                                                                                                                                                                                                                                                                  |
-| `@theaha/authline` integrator SDK (`discover`, `status`, `decodeOnboardStatus`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                   | [github.com/theahaco/stellar-assets](https://github.com/theahaco/stellar-assets)                                                                                                                                                                                                                                                                                                                                                   |
+| Component                                                                                                                                                                                                                                                                            | Status                                         | Reference                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eurcv_auth` Trustline Authorizer (denylist, set as SAC admin; `authorize_trustline`, `add/remove_banned_accounts`, `freeze/unfreeze_accounts`, `deauthorize_trustline`, `clawback`, `mint_to_account`, `pause/unpause`, `upgrade`)                                                  | **LIVE on mainnet**                            | `theahaco/eurcv_auth` (repo private — available on request); mainnet contract [`CB2DHZ…KSB3` on Stellar Expert](https://stellar.expert/explorer/public/contract/CB2DHZMQHQE3TGUMD6BRM7UCJZNIPKDRVEQOWBIRRS3G2FZOGDTRKSB3); activation page `https://eurcv.theaha.co` (currently a two-step / two-transaction flow, not yet one-signature)                                                                                          |
+| `onboard()` one-signature discovery router over CAP-73 `trust()`                                                                                                                                                                                                                     | **DELIVERED in this repo** (this grant)        | `contracts/trustline-onboard` — `onboard(sac, holder)` with on-chain authorizer discovery (CAP-68 `get_address_executable` + `SAC.admin()`). Delivered: a 17-test native suite (11 scenario + 6 environment-classification tests) plus opt-in testnet e2e for the open (USDC) and discovery (TLO) paths (`tests/e2e/`); the testnet router id is pinned in the SDK's `ROUTERS` registry (`packages/authline-sdk/src/registry.ts`). |
+| Contract Admin SEP (`Administratable` + `Upgradable`) — built upon by §3                                                                                                                                                                                                             | Draft                                          | [github.com/theahaco/admin-sep](https://github.com/theahaco/admin-sep) (SDF discussion #1670)                                                                                                                                                                                                                                                                                                                                      |
+| Asset-agnostic **Trustline Authorizer** (testnet)                                                                                                                                                                                                                                    | **DEPLOYED + WORKING on testnet** (this grant) | `CD7K7S43HSIR2DLGDT5OWSHDJQIQWFAJWZOIO66T2OVMLNYFL74OK2KU`                                                                                                                                                                                                                                                                                                                                                                         |
+| **Trustline Onboard** CAP-73 wrapper (testnet)                                                                                                                                                                                                                                       | **SUPERSEDED** (v0.2, 3-arg interface)         | `CCQJ53C6C7ROJ6DSUG572NN46W3KHRT3BF3RDLZL4PGB4JYICDTPSAZ5`. Replaced by the v0.3 discovery router — current testnet id is pinned in the SDK's `ROUTERS` registry (`packages/authline-sdk/src/registry.ts`).                                                                                                                                                                                                                        |
+| Test asset **TLO** (`AUTH_REQUIRED`) — SAC / issuer                                                                                                                                                                                                                                  | testnet                                        | SAC `CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3`, issuer `GATBENNAFELDD6XLFPIMT3GBYAGWT4A7XY45P4YCFVPK2HHRNC2HQJ4U`                                                                                                                                                                                                                                                                                                  |
+| `@theahaco/authline` integrator SDK (`discover`, `status`, `decodeOnboardStatus`, `buildSponsoredOnboardTx`, `buildAuthorizeTx`, `buildOnboardTx`, `onboardingRequest`), reference exchange-withdrawal integration, activation page, issuer admin CLI, and this `stellar.toml` block | **IN PROGRESS** (this grant)                   | [github.com/theahaco/authline](https://github.com/theahaco/authline)                                                                                                                                                                                                                                                                                                                                                               |
 
 #### Proven on testnet
 
@@ -933,6 +934,15 @@ JavaScript** — build, simulate (`prepareTransaction`), submit, and decode the
 via `RUN_TESTNET_E2E=1 npm run test:e2e:testnet`
 (`tests/e2e/testnet-tlo.e2e.test.ts`; the open-asset USDC path is covered by
 `testnet-usdc.e2e.test.ts`).
+
+**Both asset classes, one router — on-chain evidence (2026-08-12).** One
+onboarding of each asset type through the pinned testnet router, each a single
+transaction signed only by a brand-new friendbot-funded holder:
+
+| Asset class                 | Asset                             | Holder          | `onboard` transaction                                                                                                                                                                        |
+| --------------------------- | --------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Regulated (`AUTH_REQUIRED`) | **TLO** (SAC admin = Authorizer)  | `GDI7RTZM…X2RE` | [`dd80eacc…8488`](https://stellar.expert/explorer/testnet/tx/dd80eaccb5db273836517565843a712353e314182cdba9ad25015a3d60fc8488) — discovery ran: `hasTrustline = true`, `isAuthorized = true` |
+| Open (not `AUTH_REQUIRED`)  | **USDC** (testnet, Circle issuer) | `GABGK323…5KK3` | [`1c00ce17…20c9`](https://stellar.expert/explorer/testnet/tx/1c00ce17b99dde1a27970b0804c8edc220bd7f3a72aadf9099490099be8620c9) — `trust()` only, returns `Authorized`                        |
 
 **v0.2 — sponsored two-transaction flow (Backend 2 / Case B).** An earlier
 reference exchange-withdrawal demo established an authorized trustline for a

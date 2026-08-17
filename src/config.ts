@@ -9,7 +9,7 @@ import {
 	type AssetCapability,
 	type OfficialAsset,
 	type OnboarderConfig,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 
 /**
  * Config-driven. The network comes from PUBLIC_* env (app/.env or the Pages

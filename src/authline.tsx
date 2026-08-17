@@ -31,7 +31,7 @@ import {
 	getActivationStatus,
 	isValidIssuer,
 	type ActivationStatus,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
 	ASSET as DEFAULT_ASSET,

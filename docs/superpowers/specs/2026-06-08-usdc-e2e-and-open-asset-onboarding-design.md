@@ -13,8 +13,8 @@
 ## 1. Background
 
 Authline (formerly `stellar_trustline`) is a Stellar/Soroban dApp + integrator
-SDK (`@theaha/authline`) for establishing **authorized trustlines** with minimal
-user friction. The dApp (`src/authline.tsx`) walks a user through
+SDK (`@theahaco/authline`) for establishing **authorized trustlines** with
+minimal user friction. The dApp (`src/authline.tsx`) walks a user through
 `directory → idle → ready → building → signing → submitting → success`, and the
 SDK builds the underlying transactions.
 

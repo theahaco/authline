@@ -56,8 +56,8 @@ reformat.
 
 **Create:**
 
-- `vitest.config.ts` — Vitest config; aliases `@theaha/authline` → its TS source
-  so unit tests need no SDK build.
+- `vitest.config.ts` — Vitest config; aliases `@theahaco/authline` → its TS
+  source so unit tests need no SDK build.
 - `playwright.config.ts` — Playwright config; `webServer` builds the e2e
   (testnet/USDC) bundle and serves it.
 - `.env.e2e` — testnet network + `PUBLIC_ASSET_CODE=USDC` +
@@ -116,7 +116,7 @@ import { defineConfig } from "vitest/config"
 export default defineConfig({
 	resolve: {
 		alias: {
-			"@theaha/authline": resolve(
+			"@theahaco/authline": resolve(
 				__dirname,
 				"packages/authline-sdk/src/index.ts",
 			),
@@ -303,7 +303,7 @@ In `packages/authline-sdk/tsconfig.json`, add an `exclude` key after
 - [ ] **Step 6: Verify the SDK still builds cleanly (no test files emitted)**
 
 Run:
-`npm run build -w @theaha/authline && ls packages/authline-sdk/dist | grep -c "test" || echo "0 test files emitted"`
+`npm run build -w @theahaco/authline && ls packages/authline-sdk/dist | grep -c "test" || echo "0 test files emitted"`
 Expected: prints `0 test files emitted` (build succeeds; `dist` contains no
 `*.test.*`).
 
@@ -475,7 +475,7 @@ Run: `npm test -- onboard` Expected: PASS (2 tests).
 
 - [ ] **Step 6: Build the SDK + typecheck**
 
-Run: `npm run build -w @theaha/authline` Expected: succeeds (emits
+Run: `npm run build -w @theahaco/authline` Expected: succeeds (emits
 `buildTrustTx` into `dist`).
 
 - [ ] **Step 7: Commit**
@@ -564,8 +564,8 @@ git commit -m "test(app): pin testnet USDC config resolution"
 
 - [ ] **Step 1: Import `buildTrustTx`**
 
-In `src/authline.tsx`, change the `@theaha/authline` import (lines 12-16) to add
-`buildTrustTx`:
+In `src/authline.tsx`, change the `@theahaco/authline` import (lines 12-16) to
+add `buildTrustTx`:
 
 ```ts
 import {
@@ -573,7 +573,7 @@ import {
 	buildTrustTx,
 	getActivationStatus,
 	isValidIssuer,
-} from "@theaha/authline"
+} from "@theahaco/authline"
 ```
 
 - [ ] **Step 2: Add the e2e signer seam + `signTx` helper**
@@ -868,7 +868,7 @@ import {
 	TransactionBuilder,
 	rpc,
 } from "@stellar/stellar-sdk"
-import { buildTrustTx, getActivationStatus } from "@theaha/authline"
+import { buildTrustTx, getActivationStatus } from "@theahaco/authline"
 import { beforeAll, describe, expect, it } from "vitest"
 
 const RUN = process.env.RUN_TESTNET_E2E === "1"
@@ -998,7 +998,7 @@ PUBLIC_SAC="CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
 In `"scripts"`, add:
 
 ```json
-"build:e2e": "npm run build -w @theaha/authline && tsc -b && vite build --mode e2e",
+"build:e2e": "npm run build -w @theahaco/authline && tsc -b && vite build --mode e2e",
 ```
 
 - [ ] **Step 3: Build and confirm USDC is wired live**
@@ -1325,8 +1325,8 @@ constants (testnet issuer/SAC) identical across Tasks 2, 4, 6, 7, 8, 9.
 
 - Vitest SDK-source alias relies on Vite resolving the SDK's internal `./x.js`
   imports to `.ts`. If it fails, build the SDK first
-  (`npm run build -w @theaha/authline`) and remove the alias so
-  `@theaha/authline` resolves to `dist`.
+  (`npm run build -w @theahaco/authline`) and remove the alias so
+  `@theahaco/authline` resolves to `dist`.
 - The exact `stellar contract asset deploy` "already exists" message may vary;
   Task 6 matches it case-insensitively and the testnet e2e (Task 7) is the
   on-chain proof either way.

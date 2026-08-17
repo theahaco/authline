@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL(".", import.meta.url))
 export default defineConfig({
 	resolve: {
 		alias: {
-			"@theaha/authline": `${root}packages/authline-sdk/src/index.ts`,
+			"@theahaco/authline": `${root}packages/authline-sdk/src/index.ts`,
 		},
 	},
 	test: {
