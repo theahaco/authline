@@ -11,7 +11,7 @@ Track: Standard
 Status: Draft
 Created: 2026-06-04
 Discussion: https://github.com/stellar/stellar-protocol/discussions/[placeholder]
-Version: 0.3
+Version: 0.4
 ```
 
 ## Simple Summary
@@ -795,11 +795,31 @@ situational alternatives.
   asset — a custody/liability question.
 - **(c) Claimable balances** let the third party send a claimable balance to a
   trustline-less user, so the withdrawal completes with **zero user action at
-  that moment**; the user creates a trustline (and, if `AUTH_REQUIRED`, is
-  authorized) and **claims later** (one deferred signature). Claiming an
-  `AUTH_REQUIRED` asset requires the claimant be authorized at claim time — the
-  same Authorizer handles it. It defers rather than removes the trustline step,
-  and claimable-balance entries consume reserves.
+  that moment**; the user creates a trustline and **claims later**. It defers
+  rather than removes the trustline step, and claimable-balance entries consume
+  reserves.
+
+  The deferred cost is **one signature for an open asset and two for a regulated
+  one**, and the difference is a protocol constraint, not an implementation
+  choice. For an open asset the claim transaction can carry the `ChangeTrust`
+  that onboards the user —
+  `BeginSponsoringFutureReserves · ChangeTrust · EndSponsoringFutureReserves · ClaimClaimableBalance`
+  — so a single user signature both establishes the trustline and collects the
+  funds, and with the sender as fee source and sponsor the user spends no XLM at
+  all. For an `AUTH_REQUIRED` asset the claimant must be authorized **at claim
+  time**, and authorization here is a Soroban call to the Authorizer; a Soroban
+  invocation must be the **only** operation in its transaction (the network
+  rejects a mixed envelope with `Transaction contains more than one operation`),
+  so it cannot be placed between the `ChangeTrust` and the claim. A regulated
+  claim is therefore necessarily three transactions — create trustline (user),
+  authorize (**integrator, no user signature**, i.e. Case A), claim (user).
+
+  This is implemented in the reference SDK as an extension —
+  `buildClaimableBalanceDelivery`, `planClaim`, `buildClaimTx`,
+  `getClaimableBalance`, `findClaimableBalances` — and both paths, including the
+  on-chain rejection of the fused regulated claim, are exercised against testnet
+  by `tests/e2e/testnet-claimable.e2e.test.ts`. It remains **outside the
+  normative interface** below: an integrator can interoperate fully without it.
 
 We chose **(a)** as primary: the general, non-custodial, interoperable path that
 works for both asset classes; **(b)/(c)** are documented situational
@@ -961,6 +981,7 @@ CAP-73 is the protocol dependency:
 
 | Version | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.4     | 2026-08-18 | Documented claimable-balance delivery (Design Rationale (c)) against a working implementation: the open-asset claim fuses `ChangeTrust` with `ClaimClaimableBalance` for a **single** user signature, while a regulated claim is necessarily three transactions because a Soroban authorize cannot share an envelope with classic operations — verified on testnet. Shipped as a reference-SDK extension; still outside the normative interface.                                                                                                                                                                                                                             |
 | 0.3     | 2026-06-10 | `onboard` is now `onboard(sac, holder)` with on-chain authorizer discovery (CAP-68 `get_address_executable` + `SAC.admin()`); added `OnboardStatus` (`Authorized` / `TrustlineOnly`) and the typed-error rejection rule (§3); `AUTHORIZER` in `[TRUSTLINE_ONBOARDER]` demoted to informational; integrators MAY classify assets by simulating `onboard()`; documented the holder-signature-over-admin-subinvocations boundary (Security Considerations); recorded the v0.3 discovery-router run under Proven on testnet and removed the obsolete Protocol-26 JS-SDK decode caveat (the JS SDK now builds, simulates, submits, and decodes the discovery onboard end-to-end). |
 | 0.2     | 2026-06-04 | Reframed around third-party onboarding; added the two asset classes (open vs. regulated) and asset-class detection via `auth_required`; added the three onboarding cases (A zero-sig / B sponsored one-tap / C CAP-73 one-tx); added the integrator interface and SEP-7 / deep-link / hosted-redirect handoffs; documented (b)/(c) as situational alternatives; added testnet deployment ids, the proven testnet exchange-withdrawal run, and the P26 JS-SDK decode caveat.                                                                                                                                                                                                  |
 | 0.1     | 2026       | Initial draft. Defined roles, denylist/allowlist authorization-delegation interface (built on `admin-sep`), CAP-73 one-signature `onboard()` composition, the freeze = ban/disallow + deauthorize lifecycle and per-call policy evaluation, two reserve backends (CAP-73 funded-holder / CAP-33 sponsored), `[TRUSTLINE_ONBOARDER]` `stellar.toml` discovery block, activation flow, and audit events.                                                                                                                                                                                                                                                                       |

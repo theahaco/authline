@@ -26,11 +26,16 @@ import { G2cModule, G2C_ID } from "@g2c/stellar-wallets-kit-module"
 import { Keypair, StrKey, rpc, TransactionBuilder } from "@stellar/stellar-sdk"
 import {
 	buildAuthorizeTx,
+	buildClaimTx,
 	buildOnboardTx,
 	decodeOnboardStatus,
+	findClaimableBalances,
 	getActivationStatus,
+	getClaimableBalance,
 	isValidIssuer,
+	planClaim,
 	type ActivationStatus,
+	type ClaimableBalanceEntry,
 } from "@theahaco/authline"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
@@ -155,6 +160,7 @@ type Phase =
 	| "idle"
 	| "ready"
 	| "authorize" // trustline exists but is not authorized — offer the direct authorize call
+	| "claim" // a claimable balance is waiting and can be collected in one signature
 	| "building"
 	| "signing"
 	| "submitting"
@@ -874,10 +880,13 @@ function DirStatusPill({ st }: { st: ActivationStatus | "loading" }) {
 function Directory({
 	onPick,
 	statuses,
+	pendingCounts,
 }: {
 	onPick: (a: DirItem) => void
 	/** Per-asset status for the connected/previewed wallet; absent = show "Live". */
 	statuses?: Record<string, ActivationStatus | "loading">
+	/** Claimable balances waiting per asset code — badged so they're findable. */
+	pendingCounts?: Record<string, number>
 }) {
 	return (
 		<div className="al-fade">
@@ -964,7 +973,17 @@ function Directory({
 									gap: 9,
 								}}
 							>
-								{live ? (
+								{live && pendingCounts?.[a.code] ? (
+									// A balance is waiting for this wallet — say so on the
+									// directory, or the user never knows to click in.
+									<span
+										title={`${pendingCounts[a.code]} claimable balance(s) waiting for you`}
+									>
+										<Pill accent>
+											<Dot /> {pendingCounts[a.code]} to claim
+										</Pill>
+									</span>
+								) : live ? (
 									statuses?.[a.code] !== undefined ? (
 										<DirStatusPill st={statuses[a.code]!} />
 									) : (
@@ -1446,7 +1465,146 @@ export function AuthlineApp() {
 		[],
 	)
 
+	// ── Claimable-balance delivery ───────────────────────────────────────
+	// An exchange that could not pay this address (no usable trustline) may have
+	// sent a claimable balance instead. Listing balances BY CLAIMANT needs an
+	// index, so this is the one read on the page that goes to Horizon rather
+	// than RPC; a failure is non-fatal and simply hides the claim CTA.
+	const [pending, setPending] = useState<ClaimableBalanceEntry[] | null>(null)
+	const [claimHash, setClaimHash] = useState("")
+	// Which flow produced the current success/error screen. Without this the
+	// error heading is always the activation one ("Couldn't create trustline"),
+	// which is actively misleading after a failed CLAIM.
+	const [flow, setFlow] = useState<"activate" | "claim">("activate")
+	// The amount claimed, for the success screen.
+	const claimedAmount = useRef("")
+
+	// One lookup for the WHOLE wallet, not per asset: the directory needs to
+	// badge every tile, and Horizon returns all of them in a single response.
+	useEffect(() => {
+		let cancelled = false
+		setPending(null)
+		// Claimable balances can only name a classic account as claimant, so a
+		// smart-account holder never has any.
+		if (!address || isSmartAccount(address) || !NETWORK.horizonUrl) return
+		findClaimableBalances({ horizonUrl: NETWORK.horizonUrl, claimant: address })
+			.then((bs) => {
+				if (!cancelled) setPending(bs)
+			})
+			.catch(() => {
+				if (!cancelled) setPending([]) // treat a lookup failure as "none"
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [address, claimHash, hash])
+
+	/** The balances waiting for a specific asset (code AND issuer must match). */
+	const pendingFor = useCallback(
+		(a: AssetConfig) =>
+			(pending ?? []).filter(
+				(b) => b.asset === `${a.assetCode}:${a.assetIssuer}`,
+			),
+		[pending],
+	)
+	const assetPending = pendingFor(asset)
+
+	// How many balances wait per asset code — drives the directory tile badges,
+	// so a user who lands on the directory can SEE there is something for them.
+	const pendingCounts: Record<string, number> = {}
+	for (const a of LIVE_ASSETS) {
+		const n = pendingFor(a).length
+		if (n > 0) pendingCounts[a.assetCode] = n
+	}
+
+	/**
+	 * Whether the waiting balance can be collected with a SINGLE signature right
+	 * now. For an open asset that holds even with no trustline — the claim
+	 * transaction creates it. For an AUTH_REQUIRED asset the trustline must
+	 * already be authorized: a Soroban authorize cannot share a transaction with
+	 * the classic claim, so the user activates first and claims after.
+	 */
+	const claimable =
+		assetPending.length > 0 &&
+		!!status &&
+		(isOpen(asset) || status.isAuthorized) &&
+		!isSmartAccount(address)
+
+	// Route into the claim screen from a resting phase only — never interrupt a
+	// signing/submitting run or an error the user still needs to read.
+	useEffect(() => {
+		if (
+			claimable &&
+			(phase === "ready" || phase === "authorize" || phase === "already")
+		)
+			setPhase("claim")
+	}, [claimable, phase])
+
+	const claim = useCallback(async () => {
+		statusGen.current++
+		setFlow("claim")
+		setErrMsg("")
+		setTrustlineOnly(false)
+		setPhase("building")
+		try {
+			const balance = assetPending[0]
+			if (!balance) throw new Error("No claimable balance is waiting")
+			claimedAmount.current = balance.amount
+			// The list came from Horizon, which lags the ledger — confirm against
+			// RPC that the entry is still there before asking for a signature.
+			if (
+				!(await getClaimableBalance({
+					rpcUrl: NETWORK.rpcUrl,
+					balanceId: balance.balanceId,
+					allowHttp: NETWORK.allowHttp,
+				}))
+			)
+				throw new Error("That balance has already been claimed.")
+			const st = await fetchStatus(address, asset)
+			const plan = planClaim({
+				hasTrustline: st.hasTrustline,
+				isAuthorized: st.isAuthorized,
+				authRequired: !isOpen(asset),
+			})
+			// Refuse to build a transaction the ledger would reject: a regulated
+			// asset needs its own authorize transaction first.
+			if (plan.userSignatures > 1)
+				throw new Error(
+					`${asset.assetCode} must be authorized before it can be claimed — ` +
+						"activate it first, then claim.",
+				)
+			const server = new rpc.Server(NETWORK.rpcUrl, {
+				allowHttp: NETWORK.allowHttp,
+			})
+			const account = await server.getAccount(address)
+			const xdr = buildClaimTx({
+				networkPassphrase: NETWORK.passphrase,
+				claimant: address,
+				sourceSequence: account.sequenceNumber(),
+				balanceId: balance.balanceId,
+				config: asset,
+				// The claim doubles as onboarding: one signature opens the
+				// trustline and collects the balance. No sponsor here — the
+				// connected wallet pays its own reserve.
+				createTrustline: !st.hasTrustline,
+			})
+			setPhase("signing")
+			const signedTxXdr = await signTx(xdr, address)
+			setPhase("submitting")
+			const { hash: h } = await submitAndConfirm(signedTxXdr)
+			await refreshStatus(address, asset)
+			setClaimHash(h)
+			setHash(h)
+			setPhase("success")
+		} catch (e) {
+			void refreshStatus(address, asset)
+			setErrMsg(e instanceof Error ? e.message : String(e))
+			setPhase("error")
+		}
+	}, [address, asset, assetPending, refreshStatus])
+
 	const activate = useCallback(async () => {
+		setFlow("activate")
 		// Invalidate any pending pick()-started status read: were it to resolve
 		// mid-transaction it would yank the phase out of busy, re-exposing the
 		// Activate button (double submit) and the back link while signing.
@@ -1540,6 +1698,7 @@ export function AuthlineApp() {
 	// SAC set_authorized. The connected wallet only pays the fee — authorization
 	// authority comes from the Authorizer being the SAC admin.
 	const authorize = useCallback(async () => {
+		setFlow("activate")
 		// Same stale-read invalidation as activate() — see the comment there.
 		statusGen.current++
 		setErrMsg("")
@@ -1602,6 +1761,7 @@ export function AuthlineApp() {
 			<Directory
 				onPick={pick}
 				statuses={Object.keys(dirStatuses).length > 0 ? dirStatuses : undefined}
+				pendingCounts={pendingCounts}
 			/>
 		)
 	} else if (phase === "idle") {
@@ -1925,6 +2085,95 @@ export function AuthlineApp() {
 				</div>
 			</div>
 		)
+	} else if (phase === "claim") {
+		const balance = assetPending[0]
+		const needsTrustline = !status?.hasTrustline
+		body = (
+			<div className="al-fade">
+				<AssetRow asset={asset} status={<Pill accent>Waiting for you</Pill>} />
+				<div
+					style={{
+						display: "flex",
+						flexDirection: "column",
+						gap: 11,
+						padding: "15px 0",
+						borderTop: `1px solid ${AL.line}`,
+						borderBottom: `1px solid ${AL.line}`,
+					}}
+				>
+					<KV k="Your account" v={short(address)} />
+					<KV
+						k="Amount waiting"
+						v={`${balance?.amount ?? "—"} ${asset.assetCode}`}
+					/>
+					<StatusRows st={status} asset={asset} />
+				</div>
+				<p
+					style={{
+						fontFamily: AL.disp,
+						fontSize: 12.5,
+						lineHeight: 1.5,
+						color: AL.mut,
+						margin: "15px 0 16px",
+					}}
+				>
+					{needsTrustline ? (
+						<>
+							Someone sent you {asset.assetCode} as a claimable balance because
+							your account couldn’t receive it yet. One signature opens your{" "}
+							{asset.assetCode} trustline <em>and</em> collects the balance in
+							the same transaction.
+						</>
+					) : (
+						<>
+							Someone sent you {asset.assetCode} as a claimable balance. Your
+							trustline is ready — one signature collects it.
+						</>
+					)}
+				</p>
+				<Primary onClick={claim}>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 16 16"
+						fill="none"
+						stroke="#FFFFFF"
+						strokeWidth="1.9"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
+						<path d="M8 2.5v8m0 0l3-3m-3 3l-3-3M3 13h10" />
+					</svg>
+					Claim {balance?.amount ?? ""} {asset.assetCode} · 1 signature
+				</Primary>
+				{assetPending.length > 1 && (
+					<div
+						style={{
+							textAlign: "center",
+							fontFamily: AL.mono,
+							fontSize: 10.5,
+							color: AL.mut2,
+							marginTop: 12,
+						}}
+					>
+						{assetPending.length} balances waiting — claim them one at a time.
+					</div>
+				)}
+				<div
+					style={{
+						textAlign: "center",
+						fontFamily: AL.mono,
+						fontSize: 10.5,
+						color: AL.mut2,
+						marginTop: 12,
+					}}
+				>
+					{needsTrustline
+						? "The network fee and the 0.5 XLM trustline reserve are spent."
+						: "Only the network fee is spent."}
+				</div>
+			</div>
+		)
 	} else if (busy) {
 		const labels: Record<string, string> = {
 			building: "Preparing your transaction…",
@@ -2024,11 +2273,13 @@ export function AuthlineApp() {
 							letterSpacing: "-0.02em",
 						}}
 					>
-						{isSmartAccount(address)
-							? `${asset.assetCode} activated for your smart account`
-							: trustlineOnly
-								? `${asset.assetCode} trustline created`
-								: `${asset.assetCode} trustline authorized`}
+						{flow === "claim"
+							? `${claimedAmount.current} ${asset.assetCode} claimed`
+							: isSmartAccount(address)
+								? `${asset.assetCode} activated for your smart account`
+								: trustlineOnly
+									? `${asset.assetCode} trustline created`
+									: `${asset.assetCode} trustline authorized`}
 					</div>
 					<div
 						style={{
@@ -2038,7 +2289,12 @@ export function AuthlineApp() {
 							marginTop: 6,
 						}}
 					>
-						{trustlineOnly ? (
+						{flow === "claim" ? (
+							<>
+								The balance is in your wallet, and your {asset.assetCode}{" "}
+								trustline is open.
+							</>
+						) : trustlineOnly ? (
 							<>
 								Trustline created — the issuer authorizes holders off-platform.
 							</>
@@ -2060,7 +2316,13 @@ export function AuthlineApp() {
 				>
 					<KV
 						k="Status"
-						v={trustlineOnly ? "● Trustline created" : "● Authorized"}
+						v={
+							flow === "claim"
+								? "● Claimed"
+								: trustlineOnly
+									? "● Trustline created"
+									: "● Authorized"
+						}
 						accent={AL.emeraldBright}
 						mono={false}
 					/>
@@ -2167,7 +2429,9 @@ export function AuthlineApp() {
 								color: AL.ink,
 							}}
 						>
-							{errorHeading(asset)}
+							{flow === "claim"
+								? "Couldn’t claim your balance"
+								: errorHeading(asset)}
 						</div>
 						<div
 							style={{

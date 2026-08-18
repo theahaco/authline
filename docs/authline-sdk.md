@@ -27,9 +27,40 @@ value), `buildSponsoredOnboardTx()` (CAP-33 sponsored, reserve-free
 `onboard()`), `buildAuthorizeTx()` (permissionless authorize-on-behalf),
 `onboardingRequest()` (SEP-7 + deep-link + hosted handoffs),
 `discoverOnboarder()`/`parseOnboarderToml()` (StrKey-validated `stellar.toml`
-discovery), a pinned `OFFICIAL_ASSETS` registry, and an optional headless
-`useActivation()` React hook. There is **no Authline authorizer** —
-`authorize_trustline` is satisfied by `eurcv_auth`.
+discovery), a pinned `OFFICIAL_ASSETS` registry, an optional headless
+`useActivation()` React hook, and the claimable-balance delivery set below.
+There is **no Authline authorizer** — `authorize_trustline` is satisfied by
+`eurcv_auth`.
+
+#### Claimable-balance delivery
+
+For a recipient who isn't ready at all, a payment bounces. The exchange sends a
+**claimable balance** instead, so the withdrawal completes with no user
+involvement, and the user collects it later on the activation page.
+
+| Function                          | Role                                                                  |
+| --------------------------------- | --------------------------------------------------------------------- |
+| `buildClaimableBalanceDelivery()` | exchange-side: pay a trustline-less user; optional reclaim window     |
+| `planClaim()`                     | how this recipient claims, and how many signatures it costs them      |
+| `buildClaimTx()`                  | the claim — optionally fusing the `ChangeTrust` that onboards them    |
+| `getClaimableBalance()`           | read one balance off the ledger by id (RPC, no Horizon)               |
+| `findClaimableBalances()`         | list what's waiting for an address (Horizon — opt-in, needs an index) |
+
+For an **open** asset the user's ONE signature opens the trustline and claims
+the balance in a single transaction; with a `sponsor` and `feeSource` they spend
+no XLM at all.
+
+For an **AUTH_REQUIRED** asset that is not possible, and the SDK says so rather
+than building a doomed transaction: authorization is a Soroban call, a Soroban
+invocation must be the only operation in its transaction (the network rejects
+anything else with `Transaction contains more than one operation`), so it cannot
+sit between the `ChangeTrust` and the claim. `planClaim()` returns the
+three-step sequence — create trustline (user), authorize (**integrator, no user
+signature**), claim (user). `tests/e2e/testnet-claimable.e2e.test.ts` proves
+both paths on testnet, including that the fused regulated claim really is
+rejected.
+
+Runnable: `node examples/exchange-withdrawal/demo-claimable.mjs`.
 
 ### 2. The Authline frontend (landing + dApp)
 
