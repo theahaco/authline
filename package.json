@@ -22,6 +22,7 @@
     "test": "vitest run",
     "typecheck": "tsc",
     "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs",
+    "send:claimable": "node scripts/send-test-claimable.mjs",
     "test:e2e:testnet": "RUN_TESTNET_E2E=1 vitest run tests/e2e",
     "test:e2e": "playwright test"
   },

@@ -9,7 +9,9 @@
  * Case-A path (zero-signature) remain for integrators. Discover an issuer's
  * config from its stellar.toml, build the single router transaction —
  * `onboard(sac, holder)` discovers the asset class on-chain — and check
- * activation status.
+ * activation status. When the recipient is not ready at all, claimable-balance
+ * delivery lets the withdrawal complete anyway and defers onboarding to the
+ * user's claim.
  *
  * See the SEP draft: ../../sep/SEP-XXXX-trustline-onboarder.md
  */
@@ -78,8 +80,28 @@ export {
 	buildSponsoredOnboardTx,
 	onboardingRequest,
 	asAccount,
+	SEP7_MSG_MAX,
 	type OnboardingRequest,
+	type Sep7Signer,
 } from "./exchange.js"
+// Sponsorship: who pays the reserve (CAP-33) and the fee (CAP-15 fee bump),
+// plus the safety check an operations account MUST run before signing.
+export { assertSafeToSponsor, buildFeeBump } from "./sponsor.js"
+// Claimable-balance delivery: pay a user who has no usable trustline yet, and
+// let the claim itself carry the onboarding (one user signature for an open
+// asset — see `planClaim` for the AUTH_REQUIRED sequencing).
+export {
+	buildClaimableBalanceDelivery,
+	buildClaimTx,
+	getClaimableBalance,
+	findClaimableBalances,
+	planClaim,
+	type ClaimableDelivery,
+	type ClaimableBalanceEntry,
+	type ClaimPlan,
+	type ClaimStep,
+	type ClaimStepKind,
+} from "./claimable.js"
 
 /**
  * Pick the backend to use for a given holder. The CAP-73 one-signature path

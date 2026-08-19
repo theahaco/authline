@@ -33,18 +33,33 @@ const RPC_URL =
 	env(import.meta.env.PUBLIC_STELLAR_RPC_URL) ??
 	"https://soroban-testnet.stellar.org"
 
+const PASSPHRASE =
+	env(import.meta.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE) ??
+	"Test SDF Network ; September 2015"
+
+/**
+ * Horizon endpoint. Only ONE thing needs it: listing the claimable balances
+ * waiting for an address. Stellar RPC has no index from claimant → balances,
+ * so that lookup requires an indexer; everything else on this page goes
+ * through RPC. Blank it to switch the pending-balance banner off entirely.
+ */
+const HORIZON_URL =
+	env(import.meta.env.PUBLIC_HORIZON_URL) ??
+	(PASSPHRASE.includes("Public")
+		? "https://horizon.stellar.org"
+		: "https://horizon-testnet.stellar.org")
+
 export const NETWORK = {
 	rpcUrl: RPC_URL,
-	passphrase:
-		env(import.meta.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE) ??
-		"Test SDF Network ; September 2015",
+	horizonUrl: HORIZON_URL,
+	passphrase: PASSPHRASE,
 	// Permit cleartext http only for a local quickstart (localhost/127.0.0.1);
 	// any remote endpoint stays https-only. Mirrors the SDK's defaultAllowHttp so
 	// `stellar scaffold watch` against a local node works without a footgun flag.
 	allowHttp: defaultAllowHttp(RPC_URL),
 }
 
-export const NETWORK_LABEL = NETWORK.passphrase.includes("Public")
+export const NETWORK_LABEL = PASSPHRASE.includes("Public")
 	? "Stellar · Mainnet"
 	: "Stellar · Testnet"
 

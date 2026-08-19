@@ -11,7 +11,7 @@ Track: Standard
 Status: Draft
 Created: 2026-06-04
 Discussion: https://github.com/stellar/stellar-protocol/discussions/[placeholder]
-Version: 0.3
+Version: 0.4
 ```
 
 ## Simple Summary
@@ -691,6 +691,19 @@ page" (one reference consumer of this interface), but the standard does not
 require any hosted page — a wallet that embeds the SDK can drive the flow
 in-app.
 
+**Co-signatures in a handoff.** A SEP-7 wallet adds the _holder's_ signature and
+submits. That completes a **Backend 1 / Case C** transaction, whose only
+required signer is the holder. It does **not** complete a **Backend 2 / Case B**
+transaction: the sponsor sources the envelope and must sign it as well. An
+integrator handing off a sponsored transaction MUST therefore either sign as the
+sponsor **before** emitting the URI — a SEP-7 `xdr` is a full
+`TransactionEnvelope`, so that signature travels with it and the holder's
+completes it — or set the SEP-7 `callback` parameter so the wallet returns the
+signed XDR for the integrator to countersign and submit. Emitting an unsigned
+sponsored envelope with no `callback` produces a signature request that cannot
+succeed, and implementations SHOULD reject it rather than hand the user a link
+that fails on submit.
+
 For an **allowlist** policy, the integrator MUST ensure the holder is allowed
 before submitting: it SHOULD authenticate to `WEB_AUTH_ENDPOINT` (SEP-10) and
 call `AUTH_ENDPOINT` to trigger off-band KYC and a subsequent `allow(holder)` by
@@ -795,11 +808,31 @@ situational alternatives.
   asset — a custody/liability question.
 - **(c) Claimable balances** let the third party send a claimable balance to a
   trustline-less user, so the withdrawal completes with **zero user action at
-  that moment**; the user creates a trustline (and, if `AUTH_REQUIRED`, is
-  authorized) and **claims later** (one deferred signature). Claiming an
-  `AUTH_REQUIRED` asset requires the claimant be authorized at claim time — the
-  same Authorizer handles it. It defers rather than removes the trustline step,
-  and claimable-balance entries consume reserves.
+  that moment**; the user creates a trustline and **claims later**. It defers
+  rather than removes the trustline step, and claimable-balance entries consume
+  reserves.
+
+  The deferred cost is **one signature for an open asset and two for a regulated
+  one**, and the difference is a protocol constraint, not an implementation
+  choice. For an open asset the claim transaction can carry the `ChangeTrust`
+  that onboards the user —
+  `BeginSponsoringFutureReserves · ChangeTrust · EndSponsoringFutureReserves · ClaimClaimableBalance`
+  — so a single user signature both establishes the trustline and collects the
+  funds, and with the sender as fee source and sponsor the user spends no XLM at
+  all. For an `AUTH_REQUIRED` asset the claimant must be authorized **at claim
+  time**, and authorization here is a Soroban call to the Authorizer; a Soroban
+  invocation must be the **only** operation in its transaction (the network
+  rejects a mixed envelope with `Transaction contains more than one operation`),
+  so it cannot be placed between the `ChangeTrust` and the claim. A regulated
+  claim is therefore necessarily three transactions — create trustline (user),
+  authorize (**integrator, no user signature**, i.e. Case A), claim (user).
+
+  This is implemented in the reference SDK as an extension —
+  `buildClaimableBalanceDelivery`, `planClaim`, `buildClaimTx`,
+  `getClaimableBalance`, `findClaimableBalances` — and both paths, including the
+  on-chain rejection of the fused regulated claim, are exercised against testnet
+  by `tests/e2e/testnet-claimable.e2e.test.ts`. It remains **outside the
+  normative interface** below: an integrator can interoperate fully without it.
 
 We chose **(a)** as primary: the general, non-custodial, interoperable path that
 works for both asset classes; **(b)/(c)** are documented situational
@@ -944,6 +977,35 @@ transaction signed only by a brand-new friendbot-funded holder:
 | Regulated (`AUTH_REQUIRED`) | **TLO** (SAC admin = Authorizer)  | `GDI7RTZM…X2RE` | [`dd80eacc…8488`](https://stellar.expert/explorer/testnet/tx/dd80eaccb5db273836517565843a712353e314182cdba9ad25015a3d60fc8488) — discovery ran: `hasTrustline = true`, `isAuthorized = true` |
 | Open (not `AUTH_REQUIRED`)  | **USDC** (testnet, Circle issuer) | `GABGK323…5KK3` | [`1c00ce17…20c9`](https://stellar.expert/explorer/testnet/tx/1c00ce17b99dde1a27970b0804c8edc220bd7f3a72aadf9099490099be8620c9) — `trust()` only, returns `Authorized`                        |
 
+**Claimable-balance delivery — on-chain evidence (2026-08-19).** A withdrawal to
+a recipient with no trustline, completed as a claimable balance and collected
+later by the user. Reproducible via `RUN_TESTNET_E2E=1 npm run test:e2e:testnet`
+(`tests/e2e/testnet-claimable.e2e.test.ts`).
+
+| Asset class                 | Step                                       | Transaction                                                                                                                    | User signatures                                             |
+| --------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Open (not `AUTH_REQUIRED`)  | Exchange delivers the claimable balance    | [`df5ffa36…b7f6`](https://stellar.expert/explorer/testnet/tx/df5ffa36f04816ff4aa325ef63e0863939be6599b3ec6a540e07b5ef1fa6b7f6) | **0** — the user is not involved at all                     |
+| Open (not `AUTH_REQUIRED`)  | User claims; the claim opens the trustline | [`3c9bb5e6…faf9`](https://stellar.expert/explorer/testnet/tx/3c9bb5e615e72c24f8e3ef328d6b6d46248b524e5159e68861b5351dda86faf9) | **1** — 4 ops, 2 signatures, exactly one of them the user's |
+| Regulated (`AUTH_REQUIRED`) | Final claim of the three-step plan         | [`c6dda920…1347`](https://stellar.expert/explorer/testnet/tx/c6dda9203db3bcccb571ef71a8e3b0f8521c1490b65413c18d1727d49ca41347) | **1** (2 across the plan; the authorize step costs none)    |
+
+In the open-asset claim the recipient ends holding the full delivered amount
+with their XLM untouched at the 1 XLM they were created with: the sender was
+both fee source and sponsor, so the user paid neither the fee nor the 0.5 XLM
+reserve. The e2e also asserts the two negative results this design rests on — a
+plain payment to a trustline-less recipient is rejected, and the _fused_
+one-signature claim is rejected by the network for an `AUTH_REQUIRED` asset
+because the trustline created inside the claim envelope is still unauthorized
+when `ClaimClaimableBalance` runs. Neither produces a ledger entry, so both are
+reproducible only by running the suite.
+
+**Case A in pure JavaScript (2026-08-19).** The permissionless
+authorize-on-behalf step now runs through the SDK's `buildAuthorizeTx` with no
+Rust-CLI fallback:
+[`91f03714…47b9`](https://stellar.expert/explorer/testnet/tx/91f037142a0e3dae7776748f2a4faa4c1809023ad8bff2fe8a594af8658847b9)
+— **one signature, from the exchange**, sourced by the exchange account, with
+the holder appearing only as the call argument
+(`examples/exchange-withdrawal/demo.mjs`).
+
 **v0.2 — sponsored two-transaction flow (Backend 2 / Case B).** An earlier
 reference exchange-withdrawal demo established an authorized trustline for a
 brand-new **zero-XLM** user against TLO via (1) a sponsored `ChangeTrust`
@@ -961,6 +1023,7 @@ CAP-73 is the protocol dependency:
 
 | Version | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.4     | 2026-08-18 | Documented claimable-balance delivery (Design Rationale (c)) against a working implementation: the open-asset claim fuses `ChangeTrust` with `ClaimClaimableBalance` for a **single** user signature, while a regulated claim is necessarily three transactions because a Soroban authorize cannot share an envelope with classic operations — verified on testnet, with transaction hashes recorded under Proven on testnet. Shipped as a reference-SDK extension; still outside the normative interface.                                                                                                                                                                   |
 | 0.3     | 2026-06-10 | `onboard` is now `onboard(sac, holder)` with on-chain authorizer discovery (CAP-68 `get_address_executable` + `SAC.admin()`); added `OnboardStatus` (`Authorized` / `TrustlineOnly`) and the typed-error rejection rule (§3); `AUTHORIZER` in `[TRUSTLINE_ONBOARDER]` demoted to informational; integrators MAY classify assets by simulating `onboard()`; documented the holder-signature-over-admin-subinvocations boundary (Security Considerations); recorded the v0.3 discovery-router run under Proven on testnet and removed the obsolete Protocol-26 JS-SDK decode caveat (the JS SDK now builds, simulates, submits, and decodes the discovery onboard end-to-end). |
 | 0.2     | 2026-06-04 | Reframed around third-party onboarding; added the two asset classes (open vs. regulated) and asset-class detection via `auth_required`; added the three onboarding cases (A zero-sig / B sponsored one-tap / C CAP-73 one-tx); added the integrator interface and SEP-7 / deep-link / hosted-redirect handoffs; documented (b)/(c) as situational alternatives; added testnet deployment ids, the proven testnet exchange-withdrawal run, and the P26 JS-SDK decode caveat.                                                                                                                                                                                                  |
 | 0.1     | 2026       | Initial draft. Defined roles, denylist/allowlist authorization-delegation interface (built on `admin-sep`), CAP-73 one-signature `onboard()` composition, the freeze = ban/disallow + deauthorize lifecycle and per-call policy evaluation, two reserve backends (CAP-73 funded-holder / CAP-33 sponsored), `[TRUSTLINE_ONBOARDER]` `stellar.toml` discovery block, activation flow, and audit events.                                                                                                                                                                                                                                                                       |
