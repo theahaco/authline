@@ -80,7 +80,9 @@ export {
 	buildSponsoredOnboardTx,
 	onboardingRequest,
 	asAccount,
+	SEP7_MSG_MAX,
 	type OnboardingRequest,
+	type Sep7Signer,
 } from "./exchange.js"
 // Claimable-balance delivery: pay a user who has no usable trustline yet, and
 // let the claim itself carry the onboarding (one user signature for an open

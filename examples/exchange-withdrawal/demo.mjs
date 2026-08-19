@@ -12,7 +12,6 @@
  * the exchange via friendbot. The Authorizer/SAC ids below are public testnet
  * contract ids deployed by this project.
  */
-import { spawnSync } from "node:child_process"
 import {
 	Keypair,
 	Horizon,
@@ -21,6 +20,7 @@ import {
 	Networks,
 } from "@stellar/stellar-sdk"
 import {
+	buildAuthorizeTx,
 	buildSponsoredOnboardTx,
 	getActivationStatus,
 	onboardingRequest,
@@ -100,7 +100,7 @@ async function main() {
 	console.log(
 		"• Step 1/2 — sponsored trustline creation (exchange pays the reserve; user signs once).",
 	)
-	const sponsoredXdr = await buildSponsoredOnboardTx({
+	const unsignedXdr = await buildSponsoredOnboardTx({
 		rpcUrl: NET.rpcUrl,
 		networkPassphrase: NET.passphrase,
 		sponsor: exchange.publicKey(),
@@ -108,6 +108,14 @@ async function main() {
 		config: CONFIG,
 		createUserAccount: true,
 	})
+	// The sponsored envelope needs TWO signatures: the sponsor's and the user's.
+	// The exchange signs FIRST, so the signature travels inside the SEP-7 `xdr`
+	// and the wallet's single user signature completes the transaction. Handing
+	// over an unsigned envelope would give the user a link that cannot succeed —
+	// onboardingRequest now refuses to build one.
+	const sponsorSigned = TransactionBuilder.fromXDR(unsignedXdr, NET.passphrase)
+	sponsorSigned.sign(exchange)
+	const sponsoredXdr = sponsorSigned.toXDR()
 	// In a real non-custodial flow the exchange HANDS this to the user to sign — three ways:
 	const req = onboardingRequest({
 		txXdr: sponsoredXdr,
@@ -120,7 +128,8 @@ async function main() {
 	console.log("   the exchange would hand the user one of:")
 	console.log("     SEP-7   :", req.sep7Uri.slice(0, 72) + "…")
 	console.log("     hosted  :", req.hostedUrl)
-	const r1 = await submitClassic(sponsoredXdr, exchange, user) // demo co-signs as the user
+	// Exactly what a wallet does with the link: add the user's signature, submit.
+	const r1 = await submitClassic(sponsoredXdr, user)
 	console.log(
 		"   ✅ trustline created, reserve paid by the exchange:",
 		expertTx(r1.hash),
@@ -131,45 +140,21 @@ async function main() {
 		"• Step 2/2 — authorize-on-behalf (permissionless; NO user signature, NO issuer signature).",
 	)
 	await sleep(6000) // let the new trustline propagate to the RPC's ledger snapshot
-	// The SDK's buildAuthorizeTx() builds this same authorize_trustline call, but
-	// this demo does NOT invoke the SDK builder here: it submits via the Rust
-	// `stellar` CLI, which is authoritative on Protocol 26 (the JS @stellar/stellar-sdk
-	// Soroban *response* codec does not yet decode P26 trustline-write simulations,
-	// so buildAuthorizeTx's prepare step cannot complete on testnet today).
-	// Requires the `stellar` CLI on PATH, configured for testnet.
-	const r = spawnSync(
-		"stellar",
-		[
-			"contract",
-			"invoke",
-			"--id",
-			CONFIG.authorizer,
-			"--source",
-			exchange.secret(),
-			"--network",
-			"testnet",
-			"--",
-			"authorize_trustline",
-			"--account",
-			user.publicKey(),
-		],
-		{ encoding: "utf8" },
-	)
-	if (r.error?.code === "ENOENT")
-		throw new Error(
-			"the `stellar` CLI is required for this demo but was not found on PATH — " +
-				"install it (https://github.com/stellar/stellar-cli) and configure testnet.",
-		)
-	if (r.status !== 0)
-		throw new Error(
-			"authorize failed: " + (r.stderr || r.stdout || "").slice(-400),
-		)
-	const link = ((r.stderr || "") + (r.stdout || "")).match(
-		/https:\/\/stellar\.expert\S+tx\/\w+/,
-	)
+	// Pure JS, no Rust CLI: buildAuthorizeTx simulates and assembles the
+	// authorize_trustline invocation itself. The EXCHANGE is the source and the
+	// only signer — the user is merely the argument — which is what makes this
+	// step cost zero user signatures.
+	const authorizeXdr = await buildAuthorizeTx({
+		rpcUrl: NET.rpcUrl,
+		networkPassphrase: NET.passphrase,
+		source: exchange.publicKey(),
+		account: user.publicKey(),
+		config: CONFIG,
+	})
+	const authorizeHash = await submitSoroban(authorizeXdr, exchange)
 	console.log(
 		"   ✅ authorized by the exchange via the Authorizer contract:",
-		link ? link[0] : "(submitted)",
+		expertTx(authorizeHash),
 		"\n",
 	)
 

@@ -93,7 +93,7 @@ async function main() {
 	console.log(
 		"• Establish the trustline — sponsored (exchange pays the reserve; user signs once).",
 	)
-	const xdr = await buildSponsoredOnboardTx({
+	const unsignedXdr = await buildSponsoredOnboardTx({
 		rpcUrl: NET.rpcUrl,
 		networkPassphrase: NET.passphrase,
 		sponsor: exchange.publicKey(),
@@ -101,6 +101,12 @@ async function main() {
 		config,
 		createUserAccount: true,
 	})
+	// Two signatures are required here (sponsor + user). The exchange signs
+	// first so the SEP-7 link carries that signature and the user's completes
+	// the envelope; an unsigned handoff would be a link that cannot succeed.
+	const sponsorSigned = TransactionBuilder.fromXDR(unsignedXdr, NET.passphrase)
+	sponsorSigned.sign(exchange)
+	const xdr = sponsorSigned.toXDR()
 	const req = onboardingRequest({
 		txXdr: xdr,
 		networkPassphrase: NET.passphrase,
@@ -112,7 +118,8 @@ async function main() {
 	console.log("   handoff the exchange would give the user:")
 	console.log("     SEP-7  :", req.sep7Uri.slice(0, 70) + "…")
 	console.log("     hosted :", req.hostedUrl)
-	const r1 = await submit(xdr, exchange, user) // demo co-signs as the user
+	// Exactly what a wallet does with the link: add the user's signature, submit.
+	const r1 = await submit(xdr, user)
 	console.log(
 		"   ✅ trustline created (no authorize needed), reserve paid by the exchange:",
 		expertTx(r1.hash),
