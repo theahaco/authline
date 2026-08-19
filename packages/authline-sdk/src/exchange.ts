@@ -88,27 +88,61 @@ export async function buildSponsoredOnboardTx(opts: {
 	config: OnboarderConfig
 	/** Set when the user account does not exist yet (sponsored CreateAccount). */
 	createUserAccount?: boolean
+	/**
+	 * Which account sources the transaction, and therefore supplies the sequence
+	 * number.
+	 *
+	 * - `"sponsor"` (default) — the sponsor sources the transaction, so its
+	 *   sequence is consumed and concurrent builds contend, needing channel
+	 *   accounts or a retry on `tx_bad_seq`. Required, and forced, when
+	 *   `createUserAccount` is set: an account that does not exist yet has no
+	 *   sequence number to source from.
+	 * - `"user"` — opt-in, and PREFERRED once an operations account is running.
+	 *   The sequence is the holder's own, so concurrent onboardings never
+	 *   contend, and the sponsor can sign LAST: pair it with `buildFeeBump`
+	 *   after the holder signs and the sponsor consumes no sequence at all.
+	 */
+	source?: "sponsor" | "user"
 	/** Allow a cleartext-http RPC; defaults to localhost-only (`defaultAllowHttp`). */
 	allowHttp?: boolean
 }): Promise<string> {
+	if (opts.source === "user" && opts.createUserAccount) {
+		throw new Error(
+			"source: 'user' is impossible with createUserAccount — an account that " +
+				"does not exist yet has no sequence number to source a transaction",
+		)
+	}
+	const sourceRole = opts.source ?? "sponsor"
+	const sourceId = sourceRole === "sponsor" ? opts.sponsor : opts.user
 	const server = new rpc.Server(opts.rpcUrl, {
 		allowHttp: opts.allowHttp ?? defaultAllowHttp(opts.rpcUrl),
 	})
-	const src = await server.getAccount(opts.sponsor)
+	const src = await server.getAccount(sourceId)
 	const asset = new Asset(opts.config.assetCode, opts.config.assetIssuer)
+	// An operation only needs an explicit source when it differs from the
+	// transaction's; naming the other party keeps the envelope minimal.
+	const asSponsor = sourceRole === "sponsor" ? undefined : opts.sponsor
+	const asUser = sourceRole === "user" ? undefined : opts.user
 	const b = new TransactionBuilder(src, {
 		fee: BASE_FEE,
 		networkPassphrase: opts.networkPassphrase,
 	}).addOperation(
-		Operation.beginSponsoringFutureReserves({ sponsoredId: opts.user }),
+		Operation.beginSponsoringFutureReserves({
+			sponsoredId: opts.user,
+			source: asSponsor,
+		}),
 	)
 	if (opts.createUserAccount) {
 		b.addOperation(
-			Operation.createAccount({ destination: opts.user, startingBalance: "0" }),
+			Operation.createAccount({
+				destination: opts.user,
+				startingBalance: "0",
+				source: asSponsor,
+			}),
 		)
 	}
-	b.addOperation(Operation.changeTrust({ asset, source: opts.user }))
-	b.addOperation(Operation.endSponsoringFutureReserves({ source: opts.user }))
+	b.addOperation(Operation.changeTrust({ asset, source: asUser }))
+	b.addOperation(Operation.endSponsoringFutureReserves({ source: asUser }))
 	return b.setTimeout(180).build().toXDR()
 }
 

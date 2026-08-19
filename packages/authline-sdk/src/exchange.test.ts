@@ -91,7 +91,7 @@ describe("buildSponsoredOnboardTx (Case B — CAP-33 sponsored reserve)", () => 
 		config,
 	}
 
-	it("wraps a user-sourced ChangeTrust in the sponsor's sandwich", async () => {
+	it("defaults to sponsor-sourced, wrapping a user ChangeTrust in the sandwich", async () => {
 		const { buildSponsoredOnboardTx } = await import("./exchange.js")
 		const tx = TransactionBuilder.fromXDR(
 			await buildSponsoredOnboardTx(base),
@@ -103,13 +103,38 @@ describe("buildSponsoredOnboardTx (Case B — CAP-33 sponsored reserve)", () => 
 			"endSponsoringFutureReserves",
 		])
 		// The sponsor sources the envelope and pays; only the ops the USER must
-		// authorize carry their address, which is what keeps them to one signature.
+		// authorize carry their address, which keeps them to one signature.
 		expect(tx.source).toBe(SPONSOR)
+		expect(tx.operations[0].source).toBeUndefined()
 		expect(tx.operations[1].source).toBe(USER)
 		expect(tx.operations[2].source).toBe(USER)
 		const ct = tx.operations[1] as Operation.ChangeTrust
 		expect((ct.line as Asset).getCode()).toBe("EURCV")
 		expect((ct.line as Asset).getIssuer()).toBe(ISSUER)
+	})
+
+	it("sources from the holder when asked explicitly (operations-account shape)", async () => {
+		const { buildSponsoredOnboardTx } = await import("./exchange.js")
+		const tx = TransactionBuilder.fromXDR(
+			await buildSponsoredOnboardTx({ ...base, source: "user" }),
+			networkPassphrase,
+		) as Transaction
+		// The holder supplies the sequence; the sponsor only signs its own op.
+		expect(tx.source).toBe(USER)
+		expect(tx.operations[0].source).toBe(SPONSOR)
+		expect(tx.operations[1].source).toBeUndefined()
+		expect(tx.operations[2].source).toBeUndefined()
+	})
+
+	it("refuses holder-sourced when the account does not exist yet", async () => {
+		const { buildSponsoredOnboardTx } = await import("./exchange.js")
+		await expect(
+			buildSponsoredOnboardTx({
+				...base,
+				source: "user",
+				createUserAccount: true,
+			}),
+		).rejects.toThrow(/no sequence number to source a transaction/)
 	})
 
 	it("adds a sponsored CreateAccount for a user who does not exist yet", async () => {

@@ -84,6 +84,9 @@ export {
 	type OnboardingRequest,
 	type Sep7Signer,
 } from "./exchange.js"
+// Sponsorship: who pays the reserve (CAP-33) and the fee (CAP-15 fee bump),
+// plus the safety check an operations account MUST run before signing.
+export { assertSafeToSponsor, buildFeeBump } from "./sponsor.js"
 // Claimable-balance delivery: pay a user who has no usable trustline yet, and
 // let the claim itself carry the onboarding (one user signature for an open
 // asset — see `planClaim` for the AUTH_REQUIRED sequencing).

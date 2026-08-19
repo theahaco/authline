@@ -11,7 +11,9 @@ import {
 	type Transaction,
 } from "@stellar/stellar-sdk"
 import {
+	assertSafeToSponsor,
 	buildAuthorizeTx,
+	buildFeeBump,
 	buildSponsoredOnboardTx,
 	getActivationStatus,
 	type OnboarderConfig,
@@ -296,3 +298,163 @@ describe.skipIf(!RUN)(
 		}, 240_000)
 	},
 )
+
+/**
+ * The operations-account shape: the holder SOURCES the transaction and the ops
+ * account only ever SIGNS — the sponsoring operation on the inner transaction,
+ * and the CAP-15 fee bump that wraps it.
+ *
+ * Two properties are asserted here that no other test covers:
+ *
+ *  1. A holder whose account exists but holds ZERO spendable XLM is onboarded
+ *     for one signature and pays neither reserve nor fee.
+ *  2. The ops account's SEQUENCE NUMBER IS UNCHANGED across the whole flow.
+ *     That is what lets a single operations account serve unlimited concurrent
+ *     onboardings without channel accounts — it signs, but never sequences.
+ */
+describe.skipIf(!RUN)("testnet operations-account sponsorship", () => {
+	const issuer = Keypair.random()
+	const ops = Keypair.random()
+	const user = Keypair.random()
+	const CODE = "OPSX"
+	const asset = new Asset(CODE, issuer.publicKey())
+	const config: OnboarderConfig = {
+		assetCode: CODE,
+		assetIssuer: issuer.publicKey(),
+		sac: "",
+		backends: ["cap33-sponsored"],
+	}
+
+	beforeAll(async () => {
+		await Promise.all([fund(issuer.publicKey()), fund(ops.publicKey())])
+		// The holder's account EXISTS but sits exactly at the 1 XLM minimum:
+		// it has a sequence number to source with, and nothing to spend.
+		await submit(
+			new TransactionBuilder(
+				new Account(issuer.publicKey(), await seqOf(issuer.publicKey())),
+				{ fee: BASE_FEE, networkPassphrase: NET.passphrase },
+			)
+				.addOperation(
+					Operation.createAccount({
+						destination: user.publicKey(),
+						startingBalance: "1",
+					}),
+				)
+				.setTimeout(120)
+				.build()
+				.toXDR(),
+			issuer,
+		)
+	}, 180_000)
+
+	it("onboards a zero-XLM holder for one signature, ops account paying all of it", async () => {
+		const acctBefore = await horizon.loadAccount(user.publicKey())
+		const xlmBefore = acctBefore.balances.find((b) => b.asset_type === "native")
+		expect(xlmBefore && "balance" in xlmBefore ? xlmBefore.balance : null).toBe(
+			"1.0000000",
+		)
+		const opsSeqBefore = await seqOf(ops.publicKey())
+
+		// Built against the HOLDER's sequence, not the ops account's.
+		const innerXdr = await buildSponsoredOnboardTx({
+			rpcUrl: NET.rpcUrl,
+			networkPassphrase: NET.passphrase,
+			sponsor: ops.publicKey(),
+			user: user.publicKey(),
+			config,
+			source: "user",
+		})
+		const inner = TransactionBuilder.fromXDR(
+			innerXdr,
+			NET.passphrase,
+		) as Transaction
+		expect(inner.source).toBe(user.publicKey())
+
+		// The holder signs FIRST — the ops account never blocks them.
+		inner.sign(user)
+
+		// The security boundary: the ops account vets the envelope before it
+		// adds a signature that could otherwise fund arbitrary reserves.
+		expect(() =>
+			assertSafeToSponsor({
+				txXdr: inner.toXDR(),
+				networkPassphrase: NET.passphrase,
+				sponsor: ops.publicKey(),
+				user: user.publicKey(),
+				config,
+			}),
+		).not.toThrow()
+		inner.sign(ops)
+
+		// Exactly one holder signature in the whole flow.
+		const hint = user.signatureHint()
+		expect(inner.signatures.filter((s) => s.hint().equals(hint))).toHaveLength(
+			1,
+		)
+
+		// The ops account pays the fee by wrapping what the holder already signed.
+		const bumpXdr = buildFeeBump({
+			innerXdr: inner.toXDR(),
+			networkPassphrase: NET.passphrase,
+			feeSource: ops.publicKey(),
+		})
+		const bump = TransactionBuilder.fromXDR(bumpXdr, NET.passphrase)
+		if (!("innerTransaction" in bump)) throw new Error("expected a fee bump")
+		bump.sign(ops)
+		const res = await horizon.submitTransaction(bump)
+		console.log(
+			`ops-account sponsored onboard (1 user signature, 0 user XLM): ${expertTx(res.hash)}`,
+		)
+
+		// The holder is onboarded and has spent NOTHING — same 1 XLM as before.
+		const acct = await horizon.loadAccount(user.publicKey())
+		const line = acct.balances.find(
+			(b) => "asset_code" in b && b.asset_code === CODE,
+		)
+		expect(line).toBeDefined()
+		expect(line && "sponsor" in line ? line.sponsor : null).toBe(
+			ops.publicKey(),
+		)
+		const xlm = acct.balances.find((b) => b.asset_type === "native")
+		expect(xlm && "balance" in xlm ? xlm.balance : null).toBe("1.0000000")
+
+		// THE operational property: the ops account signed twice and sequenced
+		// zero times, so concurrent onboardings cannot contend on it.
+		expect(await seqOf(ops.publicKey())).toBe(opsSeqBefore)
+		// The holder's own sequence advanced instead.
+		expect(Number(await seqOf(user.publicKey()))).toBe(
+			Number(acctBefore.sequenceNumber()) + 1,
+		)
+	}, 240_000)
+
+	it("refuses to sponsor an envelope carrying an extra reserve", async () => {
+		// What an attacker would try: reuse the onboarding shape but smuggle a
+		// data entry inside the sponsorship window, billed to the ops account.
+		const seq = await seqOf(user.publicKey())
+		const hostile = new TransactionBuilder(new Account(user.publicKey(), seq), {
+			fee: BASE_FEE,
+			networkPassphrase: NET.passphrase,
+		})
+			.addOperation(
+				Operation.beginSponsoringFutureReserves({
+					sponsoredId: user.publicKey(),
+					source: ops.publicKey(),
+				}),
+			)
+			.addOperation(Operation.changeTrust({ asset }))
+			.addOperation(Operation.manageData({ name: "freeloader", value: "x" }))
+			.addOperation(Operation.endSponsoringFutureReserves({}))
+			.setTimeout(120)
+			.build()
+
+		expect(() =>
+			assertSafeToSponsor({
+				txXdr: hostile.toXDR(),
+				networkPassphrase: NET.passphrase,
+				sponsor: ops.publicKey(),
+				user: user.publicKey(),
+				config,
+			}),
+		).toThrow(/unexpected operation inside the sponsorship window: manageData/)
+	}, 120_000)
+})
