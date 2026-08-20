@@ -18,17 +18,35 @@ const horizon = new Horizon.Server("https://horizon-testnet.stellar.org")
 const holder = Keypair.random()
 const usdc = resolveOfficialAsset("USDC", "TESTNET")!
 
+// The sender must hold real testnet USDC (friendbot cannot mint it). CI passes
+// a funded account via the E2E_USDC_SENDER_SECRET repo secret; locally the
+// `me` identity in the stellar CLI keystore serves. Without either, skip
+// loudly instead of failing the suite.
+function senderSecret(): string | null {
+	if (process.env.E2E_USDC_SENDER_SECRET)
+		return process.env.E2E_USDC_SENDER_SECRET
+	try {
+		return execFileSync("stellar", ["keys", "secret", "me"], {
+			encoding: "utf8",
+		}).trim()
+	} catch {
+		return null
+	}
+}
+const SENDER_SECRET = senderSecret()
+test.skip(
+	SENDER_SECRET === null,
+	"needs a funded USDC sender: set E2E_USDC_SENDER_SECRET or have a local stellar keystore identity `me`",
+)
+
 test.beforeAll(async () => {
 	const r = await fetch(
 		`https://friendbot.stellar.org/?addr=${holder.publicKey()}`,
 	)
 	if (!r.ok) throw new Error("friendbot failed")
 
-	// Pay the holder a real USDC claimable balance from the local keystore.
-	const secret = execFileSync("stellar", ["keys", "secret", "me"], {
-		encoding: "utf8",
-	}).trim()
-	const sender = Keypair.fromSecret(secret)
+	// Pay the holder a real USDC claimable balance.
+	const sender = Keypair.fromSecret(SENDER_SECRET!)
 	const { xdr } = buildClaimableBalanceDelivery({
 		networkPassphrase: PASSPHRASE,
 		sender: sender.publicKey(),

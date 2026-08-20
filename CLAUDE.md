@@ -62,7 +62,11 @@ Each contract has `src/lib.rs`, `src/contract.rs` (or inline), and
 
 Auto-generated NPM workspace packages created by
 `stellar scaffold watch --build-clients`. These are generated from deployed
-contract instances and should not be manually edited.
+contract instances and should not be manually edited. Exceptions — hand-written
+workspace packages that ARE first-class source: `packages/authline-sdk` (the
+`@theahaco/authline` integrator SDK) and `packages/relayer` (the authorization
+relayer HTTP service; see `docs/relayer-runbook.md`, Docker image via
+`packages/relayer/Dockerfile`).
 
 ### Environment Configuration
 
