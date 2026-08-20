@@ -6,6 +6,7 @@
   "type": "module",
   "private": true,
   "main": "dist/server.js",
+  "types": "dist/server.d.ts",
   "scripts": {
     "build": "npm run build -w @theahaco/authline --prefix ../.. && tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
