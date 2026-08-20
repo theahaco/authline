@@ -1,0 +1,25 @@
+[package]
+name = "trustline-authorizer"
+description = "Asset-agnostic Trustline Authorizer — SAC-admin contract implementing the SEP's denylist/allowlist authorization-delegation interface."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+version.workspace = true
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# Integration only: the tests drive the real onboard router against this
+# authorizer, so the discovery + rejection contract between them is checked
+# here rather than assumed.
+trustline-onboard = { path = "../trustline-onboard" }

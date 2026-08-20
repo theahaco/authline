@@ -11,7 +11,10 @@ import {
 import {
 	ROUTERS,
 	buildAuthorizeTx,
+	buildOnboardTx,
+	decodeOnboardStatus,
 	getActivationStatus,
+	resolveOfficialAsset,
 	type OnboarderConfig,
 } from "@theahaco/authline"
 import { beforeAll, describe, expect, it } from "vitest"
@@ -21,16 +24,19 @@ const NET = {
 	rpcUrl: "https://soroban-testnet.stellar.org",
 	passphrase: Networks.TESTNET,
 }
-// The pinned testnet EURCV test token (AUTH_REQUIRED + AUTH_REVOCABLE) with the
-// authorizer-stub as its SAC admin — see the registry pin. This suite covers
-// what the TLO suite does not: detecting an EXISTING unauthorized trustline
-// (classic flags + the SAC's authorized() view) and the direct authorize-only
-// path (Authorizer.authorize_trustline → SAC set_authorized), no router.
+// The pinned testnet EURCV test token (AUTH_REQUIRED + AUTH_REVOCABLE +
+// AUTH_CLAWBACK_ENABLED) with the asset-agnostic Trustline Authorizer as its
+// SAC admin. Read from the registry rather than re-typed, so re-issuing the
+// test asset moves this suite with it. Covers what the TLO suite does not:
+// detecting an EXISTING unauthorized trustline (classic flags + the SAC's
+// authorized() view) and the direct authorize-only path
+// (Authorizer.authorize_trustline → SAC set_authorized), no router.
+const PINNED = resolveOfficialAsset("EURCV", "TESTNET")!
 const CONFIG: OnboarderConfig = {
-	assetCode: "EURCV",
-	assetIssuer: "GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
-	sac: "CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
-	authorizer: "CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+	assetCode: PINNED.code,
+	assetIssuer: PINNED.issuer,
+	sac: PINNED.sac,
+	authorizer: PINNED.authorizer,
 	router: ROUTERS.TESTNET,
 	backends: ["cap73-one-signature"],
 }
@@ -134,6 +140,59 @@ describe.skipIf(!RUN)(
 			tx.sign(holder)
 			await submitAndConfirm(tx)
 
+			await expect(status(holder.publicKey())).resolves.toEqual({
+				holderKind: "account",
+				hasTrustline: true,
+				isAuthorized: true,
+				isAuthorizedToMaintainLiabilities: false,
+				sacAuthorized: true,
+			})
+		}, 180_000)
+	},
+)
+
+describe.skipIf(!RUN)(
+	"testnet EURCV one-signature onboard through the router (real chain)",
+	() => {
+		const holder = Keypair.random()
+
+		beforeAll(async () => {
+			const r = await fetch(
+				`https://friendbot.stellar.org/?addr=${holder.publicKey()}`,
+			)
+			if (!r.ok) throw new Error("friendbot failed")
+		}, 120_000)
+
+		it("creates AND authorizes the trustline in one transaction, one signature", async () => {
+			// The other direction on the same asset: instead of the holder
+			// creating a trustline first and someone authorizing it after, the
+			// router does both inside one envelope — discovering this asset's
+			// Trustline Authorizer from SAC.admin() on-chain, with no authorizer
+			// id in the transaction the holder signs.
+			const xdr = await buildOnboardTx({
+				rpcUrl: NET.rpcUrl,
+				networkPassphrase: NET.passphrase,
+				holder: holder.publicKey(),
+				config: CONFIG,
+			})
+			const tx = TransactionBuilder.fromXDR(xdr, NET.passphrase) as Transaction
+			tx.sign(holder)
+
+			const server = new rpc.Server(NET.rpcUrl)
+			const sent = await server.sendTransaction(tx)
+			expect(sent.status).not.toBe("ERROR")
+			const deadline = Date.now() + 60_000
+			let got = await server.getTransaction(sent.hash)
+			while (got.status === "NOT_FOUND" && Date.now() < deadline) {
+				await sleep(1500)
+				got = await server.getTransaction(sent.hash)
+			}
+			expect(got.status).toBe("SUCCESS")
+			if (got.status !== rpc.Api.GetTransactionStatus.SUCCESS) return
+
+			// `Authorized` can only come back if the discovered authorizer ran:
+			// CAP-73 trust() alone leaves an AUTH_REQUIRED line unauthorized.
+			expect(decodeOnboardStatus(got.returnValue)).toBe("Authorized")
 			await expect(status(holder.publicKey())).resolves.toEqual({
 				holderKind: "account",
 				hasTrustline: true,

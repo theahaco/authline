@@ -143,21 +143,30 @@ export const OFFICIAL_ASSETS: OfficialAsset[] = [
 		// Testnet EURCV test token — same code as the mainnet asset, so the
 		// dApp's EURCV flow is exercisable end-to-end on testnet (resolution is
 		// per (code, network), so this never shadows the mainnet pin). Issued by
-		// scripts/issue-test-asset.sh: AUTH_REQUIRED + AUTH_REVOCABLE issuer (no
-		// clawback, unlike mainnet EURCV), authorizer-stub set as the SAC admin.
-		// Verified 2026-06-11: issuer flags via Horizon, SAC id re-derived with
-		// Asset.contractId(TESTNET), SAC admin()==stub and stub sac()==SAC via
-		// RPC simulation. Activate in the dApp with PUBLIC_ASSET_CODE=EURCV.
+		// scripts/issue-test-asset.sh: AUTH_REQUIRED + AUTH_REVOCABLE +
+		// AUTH_CLAWBACK_ENABLED, matching mainnet EURCV's flags, with the
+		// asset-agnostic Trustline Authorizer (contracts/trustline-authorizer,
+		// denylist policy) as the SAC admin.
+		//
+		// RE-ISSUED 2026-08-20 to replace the Tranche-1 `authorizer-stub`: SAC
+		// adminship is one-way, and the stub exposes no `set_admin`, so the old
+		// asset (issuer GCTYD662…76L7, authorizer CCRKMAOB…3D4X) is permanently
+		// stuck with it and could not be upgraded in place.
+		//
+		// Verified 2026-08-20: issuer flags via Horizon, SAC id re-derived with
+		// Asset.contractId(TESTNET), and SAC admin() == authorizer /
+		// authorizer sac() == SAC via RPC simulation. Activate in the dApp with
+		// PUBLIC_ASSET_CODE=EURCV.
 		code: "EURCV",
-		issuer: "GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
-		sac: "CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
-		authorizer: "CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+		issuer: "GC66PIMV4S2WEQYG3UFOGG7Z4OIAQAKJLEKX6C5ZQ6AZT4FUXUPOGIKL",
+		sac: "CCST65QNIHUJ3V2JK5SDTXUXYSGQZI6MSSXDMNRA55ECJEWU4UFDLQHR",
+		authorizer: "CDTDC7PMCJLEH53XEGGG2XIMYYP2M4N6DQS4NTZPY6IIBWFPYRI6ZZSM",
 		capability: "permissionedOneStep",
 		name: "EUR CoinVertible (testnet test token)",
 		network: "TESTNET",
 		authRevocable: true,
-		authClawback: false,
-		verifiedAt: "2026-06-11",
+		authClawback: true,
+		verifiedAt: "2026-08-20",
 	},
 	{
 		// Circle's OFFICIAL testnet EURC (same process as the testnet USDC pin):

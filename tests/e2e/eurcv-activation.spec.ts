@@ -17,7 +17,7 @@ import {
 
 const PASSPHRASE = Networks.TESTNET
 const RPC_URL = "https://soroban-testnet.stellar.org"
-const EURCV_ISSUER = "GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7"
+const EURCV_ISSUER = "GC66PIMV4S2WEQYG3UFOGG7Z4OIAQAKJLEKX6C5ZQ6AZT4FUXUPOGIKL"
 
 const fund = async (addr: string) => {
 	const r = await fetch(`https://friendbot.stellar.org/?addr=${addr}`)

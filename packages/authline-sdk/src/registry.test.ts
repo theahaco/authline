@@ -52,17 +52,19 @@ describe("registry", () => {
 		expect(t).not.toBeNull()
 		expect(t?.capability).toBe("permissionedOneStep")
 		expect(t?.issuer).toBe(
-			"GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
+			"GC66PIMV4S2WEQYG3UFOGG7Z4OIAQAKJLEKX6C5ZQ6AZT4FUXUPOGIKL",
 		)
 		expect(t?.sac).toBe(
-			"CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
+			"CCST65QNIHUJ3V2JK5SDTXUXYSGQZI6MSSXDMNRA55ECJEWU4UFDLQHR",
 		)
+		// The asset-agnostic Trustline Authorizer, not the Tranche-1 stub.
 		expect(t?.authorizer).toBe(
-			"CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+			"CDTDC7PMCJLEH53XEGGG2XIMYYP2M4N6DQS4NTZPY6IIBWFPYRI6ZZSM",
 		)
-		// Unlike mainnet EURCV: a different issuer and no clawback.
+		// A different issuer from mainnet EURCV, but the same auth flags.
 		expect(t?.issuer).not.toBe(resolveOfficialAsset("EURCV", "PUBLIC")?.issuer)
-		expect(t?.authClawback).toBe(false)
+		expect(t?.authRevocable).toBe(true)
+		expect(t?.authClawback).toBe(true)
 	})
 
 	it("resolves Circle's official testnet EURC as an open asset", () => {
