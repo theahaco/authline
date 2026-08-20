@@ -13,8 +13,8 @@
     "build:e2e:tlo": "npm run build:e2e && vite build --mode e2e-tlo --outDir dist/tlo",
     "build:e2e:eurcv": "npm run build:e2e && vite build --mode e2e-eurcv --outDir dist/eurcv",
     "install:contracts": "if ls packages/*/package.json >/dev/null 2>&1; then npm run build --workspaces --if-present; else echo 'No contract client packages present; skipping install:contracts.'; fi",
-    "test:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo test -p trustline-onboard -p authorizer-stub",
-    "build:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo build --release --target wasm32v1-none -p trustline-onboard",
+    "test:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo test -p trustline-onboard -p trustline-authorizer -p authorizer-stub",
+    "build:contracts": "RUSTC_WRAPPER= RUSTFLAGS= cargo build --release --target wasm32v1-none -p trustline-onboard -p trustline-authorizer",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier . --write",
@@ -23,6 +23,7 @@
     "typecheck": "tsc",
     "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs",
     "send:claimable": "node scripts/send-test-claimable.mjs",
+    "authorizer": "node scripts/authorizer.mjs",
     "test:e2e:testnet": "RUN_TESTNET_E2E=1 vitest run tests/e2e",
     "test:e2e": "playwright test"
   },

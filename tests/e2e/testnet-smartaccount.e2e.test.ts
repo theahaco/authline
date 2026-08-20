@@ -9,6 +9,7 @@ import {
 	ROUTERS,
 	buildOnboardTx,
 	getActivationStatus,
+	resolveOfficialAsset,
 	type OnboarderConfig,
 } from "@theahaco/authline"
 import { beforeAll, describe, expect, it } from "vitest"
@@ -25,11 +26,12 @@ const NET = {
 // works as a stand-in holder for unsigned/simulation-level checks.
 const SMART_HOLDER = "CDVVAQAQ4FKQ4DCPPIIOIAOPRJJBO6HVOXRQX3PXONJVJNNK432O6HW3" // TLO SAC
 
+const PINNED_EURCV = resolveOfficialAsset("EURCV", "TESTNET")!
 const EURCV: OnboarderConfig = {
-	assetCode: "EURCV",
-	assetIssuer: "GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
-	sac: "CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
-	authorizer: "CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+	assetCode: PINNED_EURCV.code,
+	assetIssuer: PINNED_EURCV.issuer,
+	sac: PINNED_EURCV.sac,
+	authorizer: PINNED_EURCV.authorizer,
 	router: ROUTERS.TESTNET,
 	backends: ["cap73-one-signature"],
 }

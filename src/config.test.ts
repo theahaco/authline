@@ -63,13 +63,13 @@ describe("config — testnet USDC (env-driven)", () => {
 		// A live pinned asset is fully wired straight from the registry.
 		const eurcv = LIVE_ASSETS.find((a) => a.assetCode === "EURCV")
 		expect(eurcv?.assetIssuer).toBe(
-			"GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
+			"GC66PIMV4S2WEQYG3UFOGG7Z4OIAQAKJLEKX6C5ZQ6AZT4FUXUPOGIKL",
 		)
 		expect(eurcv?.sac).toBe(
-			"CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
+			"CCST65QNIHUJ3V2JK5SDTXUXYSGQZI6MSSXDMNRA55ECJEWU4UFDLQHR",
 		)
 		expect(eurcv?.authorizer).toBe(
-			"CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+			"CDTDC7PMCJLEH53XEGGG2XIMYYP2M4N6DQS4NTZPY6IIBWFPYRI6ZZSM",
 		)
 		expect(eurcv?.capability).toBe("permissionedOneStep")
 		const { ROUTERS } = await import("@theahaco/authline")
@@ -132,13 +132,13 @@ describe("config — testnet USDC (env-driven)", () => {
 		const { ASSET } = await import("./config")
 		expect(ASSET.assetCode).toBe("EURCV")
 		expect(ASSET.assetIssuer).toBe(
-			"GCTYD662VYXT34UEPPURGATJSY3YH3YVDM35A7ZAO5F222WTAY2G76L7",
+			"GC66PIMV4S2WEQYG3UFOGG7Z4OIAQAKJLEKX6C5ZQ6AZT4FUXUPOGIKL",
 		)
 		expect(ASSET.sac).toBe(
-			"CAPQ3JM4LVTKZRDO4PUR3BWHT4IK6QUQK6GLE24MC7IQ6PKTNNZNXPQT",
+			"CCST65QNIHUJ3V2JK5SDTXUXYSGQZI6MSSXDMNRA55ECJEWU4UFDLQHR",
 		)
 		expect(ASSET.authorizer).toBe(
-			"CCRKMAOBTP43QRFZR6A62OPNJNQFNHFEY6APAAI2ABHTFOQ4HTDL3D4X",
+			"CDTDC7PMCJLEH53XEGGG2XIMYYP2M4N6DQS4NTZPY6IIBWFPYRI6ZZSM",
 		)
 		expect(ASSET.capability).toBe("permissionedOneStep")
 		expect(ASSET.authRevocable).toBe(true)
