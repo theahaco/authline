@@ -24,7 +24,7 @@ Before paying out a withdrawal of a regulated asset (e.g. EURCV):
 ```python
 import requests
 
-RELAYER = "https://relayer.example.com"          # or your self-hosted instance
+RELAYER = "https://authline-relayer.fly.dev"     # hosted TESTNET instance, or your own
 
 def ensure_ready(account: str, asset: str = "EURCV") -> bool:
     r = requests.get(f"{RELAYER}/v1/accounts/{account}/ready",
@@ -141,6 +141,14 @@ spend.)
 
 ## 4. Running it
 
+### Hosted instance
+
+A reference instance runs at **`https://authline-relayer.fly.dev`** — **testnet
+only**, default asset EURCV. Reads (`/healthz`, `/ready`) are open;
+`POST /authorize` requires a bearer token (ask the operators). It is deployed
+from this repo's [`fly.toml`](../fly.toml); production integrators should
+self-host instead (below) with their own fee account and token.
+
 ### From the repo
 
 ```bash
@@ -173,7 +181,8 @@ lands as `alreadyAuthorized` or as a same-ledger no-op.
 
 ```bash
 curl -s localhost:8787/healthz
-curl -s localhost:8787/v1/accounts/GBVAULTVXWDWDPTNCFXWU5JYJ25MYAJKBM7DGSXZWLHQK6XLLAJZQBPS/ready
+# any funded account works; this one is the hosted instance's own relayer account
+curl -s localhost:8787/v1/accounts/GCB6N27Y6GTTMRBUQNYROIB5C37PWAJKLFRL7U3JXFZF7NQIJL2NS2TQ/ready
 ```
 
 ## 5. Operations
