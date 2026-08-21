@@ -22,7 +22,7 @@ the AML/CFT framework, which is where the duty to act against a specific holder
 (a sanctioned address, a court order, a lapsed KYC file) and to demonstrate that
 action afterwards actually comes from. Taken together, the operational needs
 are: know that holders were admitted under the issuer's own policy, be able to
-stop a specific holder, be able to halt the instrument in an emergency, and be
+stop a specific holder, be able to halt all onboarding in an emergency, and be
 able to prove all of this later.
 
 On Stellar, the native mechanism is a classic asset issued with
@@ -145,16 +145,16 @@ none of it.
 
 ## 5. Obligation → mechanism map
 
-| Compliance need                                  | Mechanism                                                                                       |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| Admit holders only under the issuer's policy     | `AUTH_REQUIRED` + Authorizer policy (denylist / allowlist), enforced by the protocol            |
-| Act against a specific holder (sanctions, order) | `freeze` — durable, address-bound, survives trustline deletion; `clawback` where enabled        |
-| Pre-emptively block a known-bad address          | `ban` works before any trustline exists                                                         |
-| Emergency halt                                   | `pause` — refuses every operation network-wide for the asset; recovery paths stay open          |
-| Demonstrate enforcement afterwards               | complete, attributable on-chain event trail (§3); exportable via `history --json`               |
-| Governance changes under control                 | `set_admin` / `upgrade`, both evented; storage (bans, policy) survives upgrades                 |
-| Data minimization                                | addresses and enumerated codes only; no free text, no identity data, on-chain or in the relayer |
-| Supply control (issuance / redemption support)   | `mint` to authorized holders; `clawback` under `AUTH_CLAWBACK_ENABLED`                          |
+| Compliance need                                  | Mechanism                                                                                                                                                                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admit holders only under the issuer's policy     | `AUTH_REQUIRED` + Authorizer policy (denylist / allowlist), enforced by the protocol                                                                                                                          |
+| Act against a specific holder (sanctions, order) | `freeze` — durable, address-bound, survives trustline deletion; `clawback` where enabled                                                                                                                      |
+| Pre-emptively block a known-bad address          | `ban` works before any trustline exists                                                                                                                                                                       |
+| Emergency halt of onboarding and admin actions   | `pause` — every Authorizer operation refused, so no new holder can be authorized anywhere; transfers between already-authorized holders continue until they are individually frozen; recovery paths stay open |
+| Demonstrate enforcement afterwards               | attributable on-chain event trail, complete for the delegated path (§3); exportable via `history --json`                                                                                                      |
+| Governance changes under control                 | `set_admin` / `upgrade`, both evented; storage (bans, policy) survives upgrades                                                                                                                               |
+| Data minimization                                | addresses and enumerated codes only; no free text, no identity data, on-chain or in the relayer                                                                                                               |
+| Supply control (issuance / redemption support)   | `mint` to authorized holders; `clawback` under `AUTH_CLAWBACK_ENABLED`                                                                                                                                        |
 
 ## 6. Residual considerations
 
