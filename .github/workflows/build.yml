@@ -98,4 +98,8 @@ jobs:
       - name: Node SDK testnet e2e
         run: npm run test:e2e:testnet
       - name: Playwright browser testnet e2e
+        # The claim-flow spec needs a sender holding real testnet USDC; it
+        # skips itself when the secret is not configured.
+        env:
+          E2E_USDC_SENDER_SECRET: ${{ secrets.E2E_USDC_SENDER_SECRET }}
         run: npm run test:e2e

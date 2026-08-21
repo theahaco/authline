@@ -67,3 +67,8 @@ tsconfig.app.tsbuildinfo
 /test-results
 /playwright-report
 /tests/e2e/.auth
+
+# Hand-written relayer service (packages/* is otherwise generated clients)
+!packages/relayer
+!packages/relayer/**
+packages/relayer/dist

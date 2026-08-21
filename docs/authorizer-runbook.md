@@ -15,9 +15,11 @@ authorizes each holder's trustline. Doing that by hand means the issuer's key
 signs a `SetTrustLineFlags` for every user, forever.
 
 Instead, the issuer hands **SAC adminship** to the Trustline Authorizer once.
-From then on the contract is the only address the protocol lets flip those
-flags, and it exposes that authority through one permissionless entry point —
-`authorize_trustline(account)` — gated by a policy the issuer controls:
+From then on the contract holds the Soroban-side authority over those flags (the
+issuer's own key retains the classic `SetTrustLineFlags` path — keep it in cold
+custody and operate through the contract), and it exposes that authority through
+one permissionless entry point — `authorize_trustline(account)` — gated by a
+policy the issuer controls:
 
 | Policy        | Meaning                                               | Fits                                 |
 | ------------- | ----------------------------------------------------- | ------------------------------------ |

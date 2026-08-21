@@ -12,6 +12,9 @@ export default [
 		"packages/*",
 		"!packages/authline-sdk",
 		"packages/authline-sdk/dist",
+		// The relayer is hand-written source too (see docs/relayer-runbook.md).
+		"!packages/relayer",
+		"packages/relayer/dist",
 		"target/packages",
 		"src/contracts/*",
 		"!src/contracts/util.ts",
@@ -33,6 +36,7 @@ export default [
 			"**/*.test.ts",
 			"tests/**/*.{ts,tsx}",
 			"scripts/**/*.mjs",
+			"packages/relayer/src/**/*.ts",
 			"vitest.config.ts",
 			"playwright.config.ts",
 		],
