@@ -1,0 +1,27 @@
+# Fly.io config for the hosted authline-relayer instance (TESTNET).
+# Deploy from the repo root: `fly deploy`. See docs/relayer-runbook.md.
+app = "authline-relayer"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "packages/relayer/Dockerfile"
+
+[env]
+  STELLAR_NETWORK = "TESTNET"
+  PORT = "8787"
+
+# RELAYER_SECRET and RELAYER_API_TOKEN are Fly secrets, never committed:
+#   fly secrets set RELAYER_SECRET=S... RELAYER_API_TOKEN=...
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # The service is stateless (every answer comes from the ledger), so it can
+  # stop when idle and cold-start on the next request in a couple of seconds.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
