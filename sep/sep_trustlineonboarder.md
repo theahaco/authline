@@ -1,17 +1,19 @@
 ## Preamble
 
-<!-- TODO before submitting to stellar/stellar-protocol: replace `SEP: XXXX`
-     (the editors assign the number) and the `Discussion:` [placeholder] URL. -->
+<!-- TODO before submitting to stellar/stellar-protocol: replace the
+     `Discussion:` [placeholder] with the URL of the pre-SEP discussion thread.
+     `SEP: To Be Assigned` and `Version: v0.0.1` are the values the submission
+     process requires (ecosystem/README.md); a maintainer assigns the number. -->
 
 ```
-SEP: XXXX
+SEP: To Be Assigned
 Title: Trustline Onboarder
 Author: The Aha Company, Willem Wyndham <@willemneal>, Enzo Soyer, Pamphile Roy <@tupui>
 Track: Standard
 Status: Draft
 Created: 2026-06-04
 Discussion: https://github.com/stellar/stellar-protocol/discussions/[placeholder]
-Version: 0.5
+Version: v0.0.1
 ```
 
 ## Simple Summary
@@ -1082,6 +1084,7 @@ CAP-73 is the protocol dependency:
 
 | Version | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0.0.1  | 2026-08-31 | Submission version. The SEP process (`ecosystem/README.md`) requires a newly submitted draft to start at `v0.0.1` with the number left `To Be Assigned`. The 0.1–0.6 rows below are this document's pre-submission history in the reference-implementation repo, kept for provenance.                                                                                                                                                                                                                                                                                                                                                                                        |
 | 0.6     | 2026-08-20 | Added the authorization relayer to Reference Implementation — the §7 integrator interface as two HTTP endpoints (`ready` / `authorize`), shipped as a Docker image — plus the lessons it surfaced (three distinguishable not-ready states, `is_eligible` as a pre-submit policy read, service-layer idempotency of authorize-on-behalf) and the MiCA/data-protection design note (`docs/mica-authorization-model.md`): the on-chain record is addresses + enumerated codes only, with no free-text field anywhere in the interface. Testnet e2e now also drives the relayer's ready → authorize → ready flip over plain HTTP.                                                |
 | 0.5     | 2026-08-20 | The asset-agnostic Trustline Authorizer of §3 is implemented and live: `deauthorize_trustline` now carries an enumerated `Reason` into its §8 event, and §3 states the pause scope (everything but `unpause`/`set_admin`/`upgrade`, so a paused contract stays recoverable). Recorded the testnet deployment that replaces the Tranche-1 stub as the EURCV test token's SAC admin, the freeze-replay invariant proven against a deleted-and-recreated trustline, and the issuer admin CLI + runbook under Reference Implementation.                                                                                                                                          |
 | 0.4     | 2026-08-18 | Documented claimable-balance delivery (Design Rationale (c)) against a working implementation: the open-asset claim fuses `ChangeTrust` with `ClaimClaimableBalance` for a **single** user signature, while a regulated claim is necessarily three transactions because a Soroban authorize cannot share an envelope with classic operations — verified on testnet, with transaction hashes recorded under Proven on testnet. Shipped as a reference-SDK extension; still outside the normative interface.                                                                                                                                                                   |

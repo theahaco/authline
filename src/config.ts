@@ -276,7 +276,7 @@ export const ASSETS: DirItem[] = [
 	...roadmap.filter((r) => !LIVE_ASSETS.some((a) => a.assetCode === r.code)),
 ]
 
-export const REPO_URL = "https://github.com/theahaco/stellar-assets"
+export const REPO_URL = "https://github.com/theahaco/authline"
 
 /**
  * Base domain of the Nido hosted passkey wallet (theahaco/nido). The wallets-

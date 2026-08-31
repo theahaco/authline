@@ -13,7 +13,7 @@
  * delivery lets the withdrawal complete anyway and defers onboarding to the
  * user's claim.
  *
- * See the SEP draft: ../../sep/SEP-XXXX-trustline-onboarder.md
+ * See the SEP draft: ../../sep/sep_trustlineonboarder.md
  */
 
 export type Backend = "cap73-one-signature" | "cap33-sponsored"

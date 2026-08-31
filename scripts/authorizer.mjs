@@ -207,6 +207,18 @@ const formatAmount = (stroops) => {
 	return `${whole}.${frac}`.replace(/\.?0+$/, "")
 }
 
+/**
+ * Render one decoded event field for the audit trail. A `BytesN<32>` field (the
+ * wasm hash on an `upgraded` event) decodes to a byte array, which stringifies
+ * to raw bytes and makes the row unreadable — hex is what an operator can
+ * actually compare against a build.
+ */
+function formatEventValue(v) {
+	if (v instanceof Uint8Array) return Buffer.from(v).toString("hex")
+	if (typeof v === "bigint") return formatAmount(v)
+	return String(unwrapEnum(v))
+}
+
 // ---------------------------------------------------------------------------
 // Target resolution
 // ---------------------------------------------------------------------------
@@ -443,7 +455,7 @@ const commands = {
 			const [name, subject] = topics
 			const detail = Object.entries(data ?? {})
 				.filter(([k]) => k !== "ledger" && k !== "authorizer_admin")
-				.map(([k, v]) => `${k}=${typeof v === "bigint" ? formatAmount(v) : v}`)
+				.map(([k, v]) => `${k}=${formatEventValue(v)}`)
 				.join(" ")
 			say(
 				`ledger ${String(e.ledger).padEnd(8)} ${String(name).padEnd(13)} ` +

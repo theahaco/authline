@@ -11,7 +11,7 @@ resolver = "2"
 authors = ["The Aha Company"]
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/theahaco/stellar-assets"
+repository = "https://github.com/theahaco/authline"
 version = "0.0.1"
 
 [workspace.dependencies.soroban-sdk]
