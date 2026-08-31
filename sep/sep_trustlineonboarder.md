@@ -1,8 +1,6 @@
 ## Preamble
 
-<!-- TODO before submitting to stellar/stellar-protocol: replace the
-     `Discussion:` [placeholder] with the URL of the pre-SEP discussion thread.
-     `SEP: To Be Assigned` and `Version: v0.0.1` are the values the submission
+<!-- `SEP: To Be Assigned` and `Version: v0.0.1` are the values the submission
      process requires (ecosystem/README.md); a maintainer assigns the number. -->
 
 ```
@@ -12,7 +10,7 @@ Author: The Aha Company, Willem Wyndham <@willemneal>, Enzo Soyer, Pamphile Roy 
 Track: Standard
 Status: Draft
 Created: 2026-06-04
-Discussion: https://github.com/stellar/stellar-protocol/discussions/[placeholder]
+Discussion: https://github.com/orgs/stellar/discussions/2008
 Version: v0.0.1
 ```
 
