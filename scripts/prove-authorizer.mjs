@@ -1948,6 +1948,20 @@ const PHASE_TITLES = {
 	9: "Phase 9 — admin handover",
 }
 
+/**
+ * Format the generated report the way the repo formats everything else.
+ *
+ * CI runs `prettier . --check`, so a generated file that is not prettier-clean
+ * turns every run red until someone reformats it by hand — and the next proof
+ * run would break it again. Formatting here keeps the artifact and the check in
+ * agreement. Best-effort: a missing prettier must not fail a proof run.
+ */
+function formatReport(path) {
+	try {
+		spawnSync("npx", ["prettier", "--write", path], { encoding: "utf8" })
+	} catch {}
+}
+
 function writeReport(outPath, startedAt) {
 	let commit = "(unknown)"
 	try {
@@ -2161,6 +2175,7 @@ function writeReport(outPath, startedAt) {
 	L.push("")
 
 	writeFileSync(outPath, `${L.join("\n")}\n`)
+	formatReport(outPath)
 	return outPath
 }
 

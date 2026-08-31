@@ -199,10 +199,10 @@ pre-emptively.
   https://stellar.expert/explorer/testnet/tx/9ec8c42f707d596e775e553a9a96a9fabeeaf1795951cd9cc45b0fb0c1bbe55f
 - **Typed contract error:** `AccountBanned`
 
-The linked transaction is the holder's own CHANGE_TRUST, which succeeds — anyone
+The linked transaction is the holder's own CHANGE*TRUST, which succeeds — anyone
 may open a trustline. What they cannot get is authorization: both the router's
 `onboard` and a direct `authorize_trustline` are refused with AccountBanned
-(#1), and the trustline stays isAuthorized=false. The refusal is a _typed_
+(#1), and the trustline stays isAuthorized=false. The refusal is a \_typed*
 contract error, not a panic — the router reads an untyped abort as "no
 authorizer interface", so panicking here would silently downgrade a ban into an
 unauthorized trustline.
