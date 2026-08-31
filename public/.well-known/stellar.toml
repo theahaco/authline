@@ -3,8 +3,8 @@
 # Authline is NOT an asset issuer: this domain issues no assets, so there is
 # no [[CURRENCIES]] section and no issuer-side [TRUSTLINE_ONBOARDER] block.
 # Issuers publish [TRUSTLINE_ONBOARDER] in their own stellar.toml — see the
-# Trustline Onboarder SEP draft in this repo: sep/SEP-XXXX-trustline-onboarder.md
-# (https://github.com/theahaco/stellar-assets/blob/main/sep/SEP-XXXX-trustline-onboarder.md)
+# Trustline Onboarder SEP draft in this repo: sep/sep_trustlineonboarder.md
+# (https://github.com/theahaco/authline/blob/main/sep/sep_trustlineonboarder.md)
 
 VERSION = "2.7.0"
 

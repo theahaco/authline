@@ -24,6 +24,9 @@
     "deploy:testnet-sac": "node scripts/deploy-testnet-usdc-sac.mjs",
     "send:claimable": "node scripts/send-test-claimable.mjs",
     "authorizer": "node scripts/authorizer.mjs",
+    "prove": "npm run build -w @theahaco/authline && node scripts/prove-cases.mjs",
+    "prove:authorizer": "npm run build -w @theahaco/authline && npm run build:contracts && node scripts/prove-authorizer.mjs",
+    "prove:relayer": "npm run build -w @theahaco/authline && node scripts/prove-relayer.mjs",
     "test:e2e:testnet": "RUN_TESTNET_E2E=1 vitest run tests/e2e",
     "test:e2e": "playwright test"
   },

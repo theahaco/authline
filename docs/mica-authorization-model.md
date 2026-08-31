@@ -5,10 +5,10 @@ what gets recorded on the ledger, and why no personal data is involved anywhere
 in the system.**
 
 Status: design note accompanying the Trustline Onboarder SEP draft
-([`sep/SEP-XXXX-trustline-onboarder.md`](../sep/SEP-XXXX-trustline-onboarder.md)).
-This is an engineering document, not legal advice; it describes what the system
-records and enforces so that an issuer's compliance function can map it onto
-their own obligations.
+([`sep/sep_trustlineonboarder.md`](../sep/sep_trustlineonboarder.md)). This is
+an engineering document, not legal advice; it describes what the system records
+and enforces so that an issuer's compliance function can map it onto their own
+obligations.
 
 ---
 
