@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto"
 import { StrKey } from "@stellar/stellar-sdk"
 import {
 	resolveOfficialAsset,
@@ -79,6 +80,15 @@ const json = (status: number, body: Record<string, unknown>): HttpResult => ({
 	status,
 	body,
 })
+
+/**
+ * Constant-time bearer-token check. Comparing sha256 digests (fixed length)
+ * lets `timingSafeEqual` run regardless of token lengths, so neither the
+ * length nor a prefix of the token leaks through response timing.
+ */
+const digest = (s: string) => createHash("sha256").update(s).digest()
+const tokenMatches = (given: string | undefined, want: string): boolean =>
+	given !== undefined && timingSafeEqual(digest(given), digest(want))
 
 const err = (status: number, error: string, detail: string): HttpResult =>
 	json(status, { error, detail })
@@ -182,6 +192,15 @@ async function handleReady(
 	})
 }
 
+/**
+ * Concurrent authorizes for the same (network, asset, account) coalesce onto
+ * one promise: the idempotency check in {@link handleAuthorize} is
+ * check-then-act, so without this a burst of identical requests would each
+ * pass the "not ready yet" check and submit — each spending fees.
+ * Per-process state, like the limits in `limits.ts`.
+ */
+const inflightAuthorize = new Map<string, Promise<HttpResult>>()
+
 async function handleAuthorize(
 	cfg: RelayerConfig,
 	ops: ChainOps,
@@ -258,7 +277,14 @@ export async function handleRequest(
 
 	// authorize
 	if (method !== "POST") return err(405, "method_not_allowed", "use POST")
-	if (cfg.apiToken && bearerToken !== cfg.apiToken)
+	if (cfg.apiToken && !tokenMatches(bearerToken, cfg.apiToken))
 		return err(401, "unauthorized", "pass Authorization: Bearer <token>")
-	return handleAuthorize(cfg, ops, asset, account)
+	const key = `${cfg.network}:${asset.code}:${account}`
+	const pending = inflightAuthorize.get(key)
+	if (pending) return pending
+	const result = handleAuthorize(cfg, ops, asset, account).finally(() =>
+		inflightAuthorize.delete(key),
+	)
+	inflightAuthorize.set(key, result)
+	return result
 }

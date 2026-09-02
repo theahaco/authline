@@ -9,17 +9,20 @@ import {
 	scValToNative,
 } from "@stellar/stellar-sdk"
 import {
+	assetsForNetwork,
 	buildAuthorizeTx,
 	getActivationStatus,
 	defaultAllowHttp,
 	type OfficialAsset,
 } from "@theahaco/authline"
 import { loadConfig, type RelayerConfig } from "./config.js"
+import { createGate, createRateLimiter } from "./limits.js"
 import { handleRequest, type ChainOps } from "./service.js"
 
 // Re-exported so the e2e suite (and self-hosters embedding the relayer) can
 // import everything from one module.
 export { loadConfig, type RelayerConfig } from "./config.js"
+export * from "./limits.js"
 export * from "./service.js"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -119,37 +122,121 @@ export function makeChainOps(cfg: RelayerConfig): ChainOps {
 	}
 }
 
+/**
+ * Boot-time invariant: the relayer key must not be any pinned authorizer's
+ * admin. The docs say "never"; this makes it a mechanism — a relayer started
+ * with the admin key would turn a public HTTP endpoint into an admin console.
+ * Fails CLOSED on a confirmed match; a chain read that fails only warns, so
+ * an RPC outage cannot keep a correctly configured relayer down.
+ */
+export async function assertRelayerIsNotAdmin(
+	cfg: RelayerConfig,
+): Promise<void> {
+	const server = new rpc.Server(cfg.rpcUrl, {
+		allowHttp: defaultAllowHttp(cfg.rpcUrl),
+	})
+	const relayer = cfg.signer.publicKey()
+	const regulated = assetsForNetwork(cfg.network).filter((a) => a.authorizer)
+	for (const asset of regulated) {
+		try {
+			const tx = new TransactionBuilder(new Account(asset.issuer, "0"), {
+				fee: BASE_FEE,
+				networkPassphrase: cfg.networkPassphrase,
+			})
+				.addOperation(new Contract(asset.authorizer!).call("admin"))
+				.setTimeout(60)
+				.build()
+			const sim = await server.simulateTransaction(tx)
+			if (!rpc.Api.isSimulationSuccess(sim) || !sim.result)
+				throw new Error("error" in sim ? String(sim.error) : "no result")
+			const admin: unknown = scValToNative(sim.result.retval)
+			if (admin === relayer)
+				throw new Error(
+					`RELAYER_SECRET is the ${asset.code} authorizer's ADMIN key. ` +
+						"Refusing to start: the relayer must hold a low-privilege, " +
+						"fee-only account. Use a dedicated ops key (see the runbook).",
+				)
+		} catch (e) {
+			if (e instanceof Error && e.message.includes("Refusing to start")) throw e
+			console.warn(
+				`authline-relayer: could not verify the ${asset.code} authorizer ` +
+					`admin at boot (${e instanceof Error ? e.message : String(e)}) — ` +
+					"continuing, but ensure RELAYER_SECRET is a fee-only key",
+			)
+		}
+	}
+}
+
 /** Wire {@link handleRequest} to node:http. Exported for the e2e suite. */
 export function startServer(cfg: RelayerConfig, ops: ChainOps): Server {
+	const limiter = createRateLimiter(cfg.rateLimitRpm ?? 120)
+	const gate = createGate(cfg.maxInflight ?? 8)
+
+	const clientIp = (req: {
+		headers: Record<string, string | string[] | undefined>
+		socket: { remoteAddress?: string }
+	}): string => {
+		if (cfg.trustProxy) {
+			const fly = req.headers["fly-client-ip"]
+			if (typeof fly === "string" && fly) return fly
+			const fwd = req.headers["x-forwarded-for"]
+			const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0]?.trim()
+			if (first) return first
+		}
+		return req.socket.remoteAddress ?? "unknown"
+	}
+
 	const server = createServer((req, res) => {
+		const send = (status: number, body: Record<string, unknown>) => {
+			res.writeHead(status, { "content-type": "application/json" })
+			res.end(JSON.stringify(body))
+		}
 		const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "x"}`)
+
+		// /healthz is a static answer — platform health checks must never be
+		// rate-limited or queued behind chain work.
+		if (url.pathname !== "/healthz") {
+			if (!limiter.allow(clientIp(req)))
+				return send(429, {
+					error: "rate_limited",
+					detail: "per-IP request budget exhausted — retry shortly",
+				})
+			if (!gate.enter())
+				return send(503, {
+					error: "too_busy",
+					detail: "relayer at capacity — retry with backoff",
+				})
+			res.once("close", () => gate.leave())
+		}
+
 		const auth = req.headers.authorization
 		const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : undefined
 		handleRequest(cfg, ops, req.method ?? "GET", url, bearer)
-			.then(({ status, body }) => {
-				res.writeHead(status, { "content-type": "application/json" })
-				res.end(JSON.stringify(body))
-			})
+			.then(({ status, body }) => send(status, body))
 			.catch((e: unknown) => {
-				res.writeHead(500, { "content-type": "application/json" })
-				res.end(
-					JSON.stringify({
-						error: "internal",
-						detail: e instanceof Error ? e.message : String(e),
-					}),
+				// The message stays with the operator; callers get a generic
+				// detail — internal errors can name RPC endpoints or libraries.
+				console.error(
+					"authline-relayer: unhandled error:",
+					e instanceof Error ? e.message : String(e),
 				)
+				send(500, { error: "internal", detail: "internal error" })
 			})
 	})
-	server.listen(cfg.port)
+	server.listen(cfg.port, cfg.host ?? "0.0.0.0")
 	return server
 }
 
 // Entry point: `node dist/server.js` (skipped when imported by tests).
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const cfg = loadConfig(process.env)
+	await assertRelayerIsNotAdmin(cfg)
 	startServer(cfg, makeChainOps(cfg))
 	console.log(
-		`authline-relayer listening on :${cfg.port} — network ${cfg.network}, ` +
-			`relayer account ${cfg.signer.publicKey()}, default asset ${cfg.defaultAsset}`,
+		`authline-relayer listening on ${cfg.host ?? "0.0.0.0"}:${cfg.port} — ` +
+			`network ${cfg.network}, relayer account ${cfg.signer.publicKey()}, ` +
+			`default asset ${cfg.defaultAsset}, ` +
+			`rate limit ${cfg.rateLimitRpm ?? 120}/min/IP, ` +
+			`max in-flight ${cfg.maxInflight ?? 8}`,
 	)
 }

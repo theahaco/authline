@@ -113,31 +113,52 @@ Refusals are typed, straight from the authorizer contract:
 | 409  | `no_trustline`        | create the trustline first (the onboard router does both in one transaction) |
 | 503  | `authorizer_paused`   | issuer emergency stop — retry later                                          |
 | 502  | `chain_error`         | RPC / network trouble — safe to retry                                        |
+| 429  | `rate_limited`        | per-IP request budget exhausted — back off and retry                         |
+| 503  | `too_busy`            | instance at its concurrency cap — retry with backoff                         |
 
 ## 3. Configuration
 
 Environment variables, read once at boot (the process refuses to start
 half-configured):
 
-| Variable            | Required | Meaning                                                              |
-| ------------------- | -------- | -------------------------------------------------------------------- |
-| `RELAYER_SECRET`    | yes      | `S...` secret of a **funded, low-privilege** operations account      |
-| `STELLAR_NETWORK`   | no       | `TESTNET` (default) or `PUBLIC`                                      |
-| `RPC_URL`           | no       | Stellar RPC override (defaults per network)                          |
-| `RELAYER_API_TOKEN` | no       | when set, `POST /authorize` requires `Authorization: Bearer <token>` |
-| `DEFAULT_ASSET`     | no       | asset code when `?asset=` is omitted (default `EURCV`)               |
-| `PORT`              | no       | listen port (default `8787`)                                         |
+| Variable            | Required | Meaning                                                                                          |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `RELAYER_SECRET`    | yes      | `S...` secret of a **funded, low-privilege** operations account                                  |
+| `RELAYER_API_TOKEN` | yes\*    | Bearer token for `POST /authorize`, **min 16 chars**. \*Optional only when `HOST` is loopback    |
+| `STELLAR_NETWORK`   | no       | `TESTNET` (default) or `PUBLIC`                                                                  |
+| `RPC_URL`           | no       | Stellar RPC override (defaults per network)                                                      |
+| `DEFAULT_ASSET`     | no       | asset code when `?asset=` is omitted (default `EURCV`)                                           |
+| `PORT`              | no       | listen port (default `8787`)                                                                     |
+| `HOST`              | no       | bind interface (default `0.0.0.0`)                                                               |
+| `RATE_LIMIT_RPM`    | no       | per-IP requests/minute on the `/v1` routes (default `120`, `0` disables)                         |
+| `MAX_INFLIGHT`      | no       | max concurrent `/v1` requests, `503 too_busy` beyond (default `8`, `0` disables)                 |
+| `TRUST_PROXY`       | no       | `1`/`true`: client IP from `Fly-Client-IP` / `X-Forwarded-For` — **only behind a trusted proxy** |
 
 **The key.** `authorize_trustline` is permissionless, so the relayer's account
 has exactly one job: paying transaction fees. Use a dedicated operations account
 holding a few XLM — **never** the authorizer admin key and never the asset
 issuer key. If the key leaks, the attacker can spend your fee balance; they gain
-no authority over the asset.
+no authority over the asset. Both bans are enforced at boot: the relayer
+**refuses to start** if `RELAYER_SECRET` is a pinned asset's issuer key (checked
+offline against the registry) or an authorizer admin key (checked by simulating
+each pinned authorizer's `admin()`; an unreachable RPC only warns, so an outage
+cannot keep a correct configuration down).
 
-**The token.** Reads are free; writes cost you fees. On a public instance set
-`RELAYER_API_TOKEN` so strangers cannot drain the fee balance by spamming
-`/authorize`. (Each spam authorize is harmless on-chain — it is your XLM they
-spend.)
+**The token.** Reads are free; writes cost you fees. The token is required
+unless the service binds a loopback interface (`HOST=127.0.0.1` for local
+development): an open `POST /authorize` lets anyone spend the fee balance. The
+comparison is constant-time, and a token under 16 characters is refused at boot.
+The token is **fee-abuse protection, never a compliance control** — the contract
+refuses ineligible accounts no matter who asks.
+
+**The limits.** Both `/v1` routes hit RPC on your quota, and an authorize can
+block up to 60 s awaiting confirmation, so the service ships with per-IP rate
+limiting (`429 rate_limited`) and a concurrency cap (`503 too_busy`); both are
+safe to retry with backoff. `/healthz` is exempt so platform health checks never
+queue behind chain work. Concurrent authorizes for the same account coalesce
+into one submission, so a burst of identical requests costs one fee. Limits are
+per-process — replicas behind a load balancer each apply their own, and edge
+rate limiting can still be layered in front.
 
 ## 4. Running it
 
@@ -154,7 +175,8 @@ self-host instead (below) with their own fee account and token.
 ```bash
 npm install
 npm run build -w @theahaco/authline-relayer
-RELAYER_SECRET=S... node packages/relayer/dist/server.js
+# Local development: loopback bind, no token needed.
+RELAYER_SECRET=S... HOST=127.0.0.1 node packages/relayer/dist/server.js
 ```
 
 ### Docker (self-hosting)
@@ -168,14 +190,15 @@ docker build -f packages/relayer/Dockerfile -t authline-relayer .
 docker run -p 8787:8787 \
   -e RELAYER_SECRET=S... \
   -e STELLAR_NETWORK=TESTNET \
-  -e RELAYER_API_TOKEN=change-me \
+  -e RELAYER_API_TOKEN=change-me-16-chars-min \
   authline-relayer
 ```
 
 The container is stateless — every answer comes from the ledger via RPC — so run
 as many replicas as you like behind any HTTP load balancer; no shared state, no
-sticky sessions. Concurrent authorizes for the same account are safe: the second
-lands as `alreadyAuthorized` or as a same-ledger no-op.
+sticky sessions. Concurrent authorizes for the same account are safe: within one
+process they coalesce into a single submission; across replicas the second lands
+as `alreadyAuthorized` or as a same-ledger no-op.
 
 ### Smoke test
 

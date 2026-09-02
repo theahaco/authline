@@ -225,6 +225,45 @@ describe("POST /authorize", () => {
 		expect([r.status, r.body.error]).toEqual([403, "account_banned"])
 	})
 
+	it("coalesces concurrent authorizes for one account into one submission", async () => {
+		// The idempotency check is check-then-act; without coalescing, a burst
+		// of identical requests would each pass it and each spend fees.
+		const account = Keypair.random().publicKey()
+		let submissions = 0
+		let release!: (hash: string) => void
+		const o: Partial<ChainOps> = {
+			view: unauthorized,
+			authorize: () => {
+				submissions += 1
+				return new Promise<string>((r) => {
+					release = r
+				})
+			},
+		}
+		const [a, b] = [
+			POST(`/v1/accounts/${account}/authorize`, o),
+			POST(`/v1/accounts/${account}/authorize`, o),
+		]
+		// Let both requests reach the in-flight map before resolving.
+		await new Promise((r) => setImmediate(r))
+		release("txhash1")
+		const [ra, rb] = await Promise.all([a, b])
+		expect(submissions).toBe(1)
+		expect(ra.body).toMatchObject({ authorized: true, txHash: "txhash1" })
+		expect(rb.body).toMatchObject({ authorized: true, txHash: "txhash1" })
+
+		// The key is released afterwards: a later authorize submits again.
+		const later = await POST(`/v1/accounts/${account}/authorize`, {
+			view: unauthorized,
+			authorize: () => {
+				submissions += 1
+				return Promise.resolve("txhash2")
+			},
+		})
+		expect(submissions).toBe(2)
+		expect(later.body).toMatchObject({ txHash: "txhash2" })
+	})
+
 	it("enforces the bearer token only when one is configured", async () => {
 		const tokenCfg = { ...cfg, apiToken: "s3cret" }
 		const call = (token?: string) =>
