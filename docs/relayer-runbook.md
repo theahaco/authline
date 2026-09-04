@@ -116,23 +116,83 @@ Refusals are typed, straight from the authorizer contract:
 | 429  | `rate_limited`        | per-IP request budget exhausted — back off and retry                         |
 | 503  | `too_busy`            | instance at its concurrency cap — retry with backoff                         |
 
+### SEP-7 handoff — `POST /v1/sep7/request`, `POST /v1/sep7/callback`, `GET /.well-known/stellar.toml`
+
+The relayer is also the **integrator backend for the SEP-7 handoff** (full
+workflow: [sep7-handoff.md](sep7-handoff.md)).
+
+`POST /v1/sep7/request` — JSON
+`{ "account": "G…|C…", "asset": "CODE", "msg": "…" }`. Builds the one-signature
+onboard transaction for `account`, wraps it in a `web+stellar:tx` request
+**signed** as `SEP7_ORIGIN_DOMAIN`, with `callback` pointing back at this
+relayer, and returns:
+
+```json
+{
+	"account": "G...",
+	"asset": "EURCV",
+	"alreadyAuthorized": false,
+	"sep7Uri": "web+stellar:tx?xdr=...&callback=url%3A...&origin_domain=...&signature=...",
+	"handlerUrl": "https://authline.io/app.html?sep7=...",
+	"callback": "https://authline-relayer.fly.dev/v1/sep7/callback",
+	"signed": true,
+	"originDomain": "authline-relayer.fly.dev",
+	"expiresAt": "2026-09-04T12:03:00.000Z"
+}
+```
+
+`alreadyAuthorized: true` (no request) for a ready account; `409 no_account` for
+an unfunded G-account. No token: it costs no fee, only RPC reads.
+
+`POST /v1/sep7/callback` — form-encoded `xdr=<signed envelope>` (SEP-7) or JSON
+`{ "xdr": "…" }`. Called by the **user's wallet**, so no token; instead it
+accepts exactly one transaction shape — the pinned router's
+`onboard(<pinned SAC>, holder)` — holder-sourced and already signed (submit
+only), or relayer-sourced for a smart-account holder with address-credential
+auth entries only (countersign + submit, fee-capped). Everything else is
+`400 not_countersignable`. Answers like `/authorize`:
+`{ account, asset, authorized, alreadyAuthorized, txHash }`. Enabled by default
+on a loopback bind; `ALLOW_SEP7_CALLBACK=1` elsewhere.
+
+`POST /v1/claimable/send` — JSON
+`{ "account": "G…", "asset": "CODE", "amount": "25" }`. Pays `amount` from the
+relayer's own treasury as a claimable balance naming `account` (30-day reclaim),
+for a recipient who cannot receive a payment yet. Returns
+`{ balanceId, txHash, claimUrl }`; `claimUrl` is the activation page where the
+user claims it. Capped per request by `CLAIMABLE_MAX_AMOUNT`. The relayer must
+hold the asset: `npm run fund:treasury -- --relayer <alias>` funds a testnet
+relayer with USDC and EURCV from the keystore identities.
+
+`GET /.well-known/stellar.toml` — publishes `URI_REQUEST_SIGNING_KEY`, the key
+wallets verify request signatures against. This is why `SEP7_ORIGIN_DOMAIN` must
+be the relayer's own public host.
+
+All responses carry permissive CORS headers (bearer auth, never cookies), so a
+wallet page in a browser can call the callback.
+
 ## 3. Configuration
 
 Environment variables, read once at boot (the process refuses to start
 half-configured):
 
-| Variable            | Required | Meaning                                                                                          |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `RELAYER_SECRET`    | yes      | `S...` secret of a **funded, low-privilege** operations account                                  |
-| `RELAYER_API_TOKEN` | yes\*    | Bearer token for `POST /authorize`, **min 16 chars**. \*Optional only when `HOST` is loopback    |
-| `STELLAR_NETWORK`   | no       | `TESTNET` (default) or `PUBLIC`                                                                  |
-| `RPC_URL`           | no       | Stellar RPC override (defaults per network)                                                      |
-| `DEFAULT_ASSET`     | no       | asset code when `?asset=` is omitted (default `EURCV`)                                           |
-| `PORT`              | no       | listen port (default `8787`)                                                                     |
-| `HOST`              | no       | bind interface (default `0.0.0.0`)                                                               |
-| `RATE_LIMIT_RPM`    | no       | per-IP requests/minute on the `/v1` routes (default `120`, `0` disables)                         |
-| `MAX_INFLIGHT`      | no       | max concurrent `/v1` requests, `503 too_busy` beyond (default `8`, `0` disables)                 |
-| `TRUST_PROXY`       | no       | `1`/`true`: client IP from `Fly-Client-IP` / `X-Forwarded-For` — **only behind a trusted proxy** |
+| Variable               | Required | Meaning                                                                                              |
+| ---------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `RELAYER_SECRET`       | yes      | `S...` secret of a **funded, low-privilege** operations account                                      |
+| `RELAYER_API_TOKEN`    | yes\*    | Bearer token for `POST /authorize`, **min 16 chars**. \*Optional only when `HOST` is loopback        |
+| `STELLAR_NETWORK`      | no       | `TESTNET` (default) or `PUBLIC`                                                                      |
+| `RPC_URL`              | no       | Stellar RPC override (defaults per network)                                                          |
+| `DEFAULT_ASSET`        | no       | asset code when `?asset=` is omitted (default `EURCV`)                                               |
+| `PORT`                 | no       | listen port (default `8787`)                                                                         |
+| `HOST`                 | no       | bind interface (default `0.0.0.0`)                                                                   |
+| `RATE_LIMIT_RPM`       | no       | per-IP requests/minute on the `/v1` routes (default `120`, `0` disables)                             |
+| `MAX_INFLIGHT`         | no       | max concurrent `/v1` requests, `503 too_busy` beyond (default `8`, `0` disables)                     |
+| `TRUST_PROXY`          | no       | `1`/`true`: client IP from `Fly-Client-IP` / `X-Forwarded-For` — **only behind a trusted proxy**     |
+| `SEP7_ORIGIN_DOMAIN`   | no       | this relayer's public host (bare domain). Set → SEP-7 requests are signed; unset → unsigned          |
+| `SEP7_SIGNING_SECRET`  | no       | dedicated `S...` key for request signing (default: the relayer key; signing a URI grants nothing)    |
+| `SEP7_PUBLIC_URL`      | no       | public base URL for the `callback` (default `https://<SEP7_ORIGIN_DOMAIN>`, else `http://host:port`) |
+| `SEP7_HANDLER_BASE`    | no       | receiving page for `handlerUrl` (default `https://authline.io/app.html`)                             |
+| `ALLOW_SEP7_CALLBACK`  | no       | `1`/`true` serves `POST /v1/sep7/callback` (default: only on a loopback bind)                        |
+| `SEP7_MAX_FEE_STROOPS` | no       | highest fee the callback countersigns for a smart-account holder (default `5000000` = 0.5 XLM)       |
 
 **The key.** `authorize_trustline` is permissionless, so the relayer's account
 has exactly one job: paying transaction fees. Use a dedicated operations account
@@ -213,6 +273,10 @@ curl -s localhost:8787/v1/accounts/GCB6N27Y6GTTMRBUQNYROIB5C37PWAJKLFRL7U3JXFZF7
 - **Fee balance.** The relayer account pays ~0.00001 XLM per authorize plus
   Soroban resource fees. Alert when its balance drops below ~5 XLM
   (`GET /healthz` names the account; watch it in Horizon/RPC).
+- **Reserves and float.** Case B locks ~1–1.5 XLM of the relayer's balance per
+  sponsored holder until the sponsored entries are removed, and
+  `/v1/claimable/send` spends the treasury's asset balances. Watch both; the
+  testnet instance is refilled with `npm run fund:treasury`.
 - **Failure modes.** `503 authorizer_paused` means the issuer pulled the
   emergency brake — that is policy working, not an outage. `502 chain_error` is
   RPC trouble; the service holds no state, so restart/retry freely.

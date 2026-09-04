@@ -68,3 +68,41 @@ describe("loadConfig — token and bind rules", () => {
 		)
 	})
 })
+
+describe("loadConfig — SEP-7 request signing", () => {
+	it("signs as the relayer key by default, with the public URL derived from the domain", () => {
+		const cfg = loadConfig(env({ SEP7_ORIGIN_DOMAIN: "relay.example" }))
+		expect(cfg.sep7OriginDomain).toBe("relay.example")
+		expect(cfg.sep7Signer.publicKey()).toBe(cfg.signer.publicKey())
+		expect(cfg.sep7PublicUrl).toBe("https://relay.example")
+		expect(cfg.sep7HandlerBase).toBe("https://authline.io/app.html")
+	})
+
+	it("accepts a dedicated signing key and explicit URLs; rejects malformed ones", () => {
+		const k = Keypair.random()
+		const cfg = loadConfig(
+			env({
+				SEP7_SIGNING_SECRET: k.secret(),
+				SEP7_PUBLIC_URL: "http://127.0.0.1:8787/",
+				SEP7_HANDLER_BASE: "http://localhost:4173/app.html",
+			}),
+		)
+		expect(cfg.sep7Signer.publicKey()).toBe(k.publicKey())
+		expect(cfg.sep7PublicUrl).toBe("http://127.0.0.1:8787")
+		expect(cfg.sep7OriginDomain).toBeUndefined()
+		expect(() =>
+			loadConfig(env({ SEP7_ORIGIN_DOMAIN: "https://x.example" })),
+		).toThrow(/bare domain/)
+		expect(() => loadConfig(env({ SEP7_SIGNING_SECRET: "bad" }))).toThrow(
+			/secret seed/,
+		)
+	})
+
+	it("enables the callback on loopback by default, and by flag elsewhere", () => {
+		expect(loadConfig(env()).allowSep7Callback).toBe(false)
+		expect(loadConfig(env({ HOST: "127.0.0.1" })).allowSep7Callback).toBe(true)
+		expect(
+			loadConfig(env({ ALLOW_SEP7_CALLBACK: "1" })).allowSep7Callback,
+		).toBe(true)
+	})
+})

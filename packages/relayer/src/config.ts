@@ -35,6 +35,41 @@ export interface RelayerConfig {
 	 * attacker-chosen and defeats per-IP limiting.
 	 */
 	trustProxy?: boolean
+	/**
+	 * Serve `POST /v1/sep7/callback` — the SEP-7 `callback` receiver that
+	 * countersigns (as fee source) and submits a router `onboard` for a
+	 * smart-account holder. It is called by the USER's wallet, so it cannot
+	 * carry the bearer token; it is instead bounded by shape (see
+	 * `validateSep7Callback`), fee cap and the per-IP limits. Default: on for
+	 * a loopback bind, off otherwise — set ALLOW_SEP7_CALLBACK=1 to enable it
+	 * on a hosted instance.
+	 */
+	allowSep7Callback?: boolean
+	/** Highest total fee (stroops) the callback will countersign. Default 0.5 XLM. */
+	sep7MaxFeeStroops?: number
+	/**
+	 * SEP-7 `origin_domain`: the domain whose `/.well-known/stellar.toml`
+	 * publishes `URI_REQUEST_SIGNING_KEY` — this relayer's own public host,
+	 * since it serves that toml itself. Unset → requests go out UNSIGNED and
+	 * wallets show them as unverified.
+	 */
+	sep7OriginDomain?: string
+	/**
+	 * Key that signs SEP-7 requests (published as URI_REQUEST_SIGNING_KEY).
+	 * Defaults to the relayer key: signing a URI grants nothing on-chain, so a
+	 * separate key is hygiene, not security.
+	 */
+	sep7Signer: Keypair
+	/**
+	 * Public base URL of this relayer, for the `callback` it puts in requests
+	 * (e.g. `https://authline-relayer.fly.dev`). Defaults to
+	 * `https://<sep7OriginDomain>`, else `http://<host>:<port>`.
+	 */
+	sep7PublicUrl: string
+	/** The receiving page for `handlerUrl` (default https://authline.io/app.html). */
+	sep7HandlerBase: string
+	/** Per-request cap on `POST /v1/claimable/send` amounts (asset units). Default 100. */
+	claimableMaxAmount?: number
 }
 
 /** The networks the relayer serves — a hosted relayer has no LOCAL story. */
@@ -127,6 +162,17 @@ export function loadConfig(env: NodeJS.ProcessEnv): RelayerConfig {
 				"Set RELAYER_API_TOKEN, or bind locally with HOST=127.0.0.1",
 		)
 
+	const positiveNumber = (
+		name: string,
+		raw: string | undefined,
+		dflt: number,
+	) => {
+		if (raw === undefined) return dflt
+		const n = Number(raw)
+		if (!Number.isFinite(n) || n <= 0)
+			throw new Error(`${name} must be a positive number, got '${raw}'`)
+		return n
+	}
 	const nonNegInt = (name: string, raw: string | undefined, dflt: number) => {
 		if (raw === undefined) return dflt
 		const n = Number(raw)
@@ -134,6 +180,44 @@ export function loadConfig(env: NodeJS.ProcessEnv): RelayerConfig {
 			throw new Error(`${name} must be a non-negative integer, got '${raw}'`)
 		return n
 	}
+
+	const sep7OriginDomain = env.SEP7_ORIGIN_DOMAIN?.trim() || undefined
+	if (
+		sep7OriginDomain &&
+		!/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(
+			sep7OriginDomain,
+		)
+	)
+		throw new Error(
+			`SEP7_ORIGIN_DOMAIN must be a bare domain (no scheme/path), got '${sep7OriginDomain}'`,
+		)
+	let sep7Signer = signer
+	if (env.SEP7_SIGNING_SECRET) {
+		if (!StrKey.isValidEd25519SecretSeed(env.SEP7_SIGNING_SECRET))
+			throw new Error("SEP7_SIGNING_SECRET must be an S... secret seed")
+		sep7Signer = Keypair.fromSecret(env.SEP7_SIGNING_SECRET)
+	}
+	const sep7PublicUrl = (
+		env.SEP7_PUBLIC_URL?.trim() ||
+		(sep7OriginDomain
+			? `https://${sep7OriginDomain}`
+			: `http://${host}:${port}`)
+	).replace(/\/$/, "")
+	if (!/^https?:\/\/\S+$/.test(sep7PublicUrl))
+		throw new Error(
+			`SEP7_PUBLIC_URL must be an http(s) URL, got '${sep7PublicUrl}'`,
+		)
+	const sep7HandlerBase =
+		env.SEP7_HANDLER_BASE?.trim() || "https://authline.io/app.html"
+	if (!/^https?:\/\/\S+$/.test(sep7HandlerBase))
+		throw new Error(
+			`SEP7_HANDLER_BASE must be an http(s) URL, got '${sep7HandlerBase}'`,
+		)
+
+	const allowSep7Callback =
+		env.ALLOW_SEP7_CALLBACK === undefined
+			? loopback
+			: env.ALLOW_SEP7_CALLBACK === "1" || env.ALLOW_SEP7_CALLBACK === "true"
 
 	return {
 		network,
@@ -147,5 +231,20 @@ export function loadConfig(env: NodeJS.ProcessEnv): RelayerConfig {
 		rateLimitRpm: nonNegInt("RATE_LIMIT_RPM", env.RATE_LIMIT_RPM, 120),
 		maxInflight: nonNegInt("MAX_INFLIGHT", env.MAX_INFLIGHT, 8),
 		trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
+		allowSep7Callback,
+		sep7MaxFeeStroops: nonNegInt(
+			"SEP7_MAX_FEE_STROOPS",
+			env.SEP7_MAX_FEE_STROOPS,
+			5_000_000,
+		),
+		sep7OriginDomain,
+		sep7Signer,
+		sep7PublicUrl,
+		sep7HandlerBase,
+		claimableMaxAmount: positiveNumber(
+			"CLAIMABLE_MAX_AMOUNT",
+			env.CLAIMABLE_MAX_AMOUNT,
+			100,
+		),
 	}
 }
