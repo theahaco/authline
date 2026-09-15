@@ -11,7 +11,7 @@ Track: Standard
 Status: Draft
 Created: 2026-06-04
 Discussion: https://github.com/orgs/stellar/discussions/2008
-Version: v0.0.1
+Version: v0.0.2
 ```
 
 ## Simple Summary
@@ -379,13 +379,40 @@ other state-changing entry point, leaving only `unpause`, `set_admin` and
 
 #### Error codes (normative minimum)
 
-| Error                          | Condition                                |
-| ------------------------------ | ---------------------------------------- |
-| `AccountBanned`                | denylist policy, `account` is banned     |
-| `AccountNotAllowed`            | allowlist policy, `account` not allowed  |
-| `NoTrustline`                  | `account` has no trustline for the asset |
-| `ContractPaused`               | contract is paused                       |
-| `CannotAuthorizeAdminContract` | `account == authorizer contract address` |
+Contract errors are encoded on the wire as `u32` values, so the names alone do
+not make implementations interoperable. Wallets and integrators branch on the
+value to show the right message (banned vs. not-yet-allowed vs. paused), and
+they MUST be able to do so against any conforming Authorizer. Implementations
+MUST therefore use exactly these values:
+
+| Code | Error                          | Condition                                |
+| ---- | ------------------------------ | ---------------------------------------- |
+| `1`  | `AccountBanned`                | denylist policy, `account` is banned     |
+| `2`  | `AccountNotAllowed`            | allowlist policy, `account` not allowed  |
+| `3`  | `NoTrustline`                  | `account` has no trustline for the asset |
+| `4`  | `ContractPaused`               | contract is paused                       |
+| `5`  | `CannotAuthorizeAdminContract` | `account == authorizer contract address` |
+
+Codes `1`–`5` are reserved by this SEP. An implementation MAY define further
+errors for its own admin entry points (for example an invalid batch, or an
+issuer flag the asset does not carry) and MUST assign them values of `6` or
+above so they never collide with the normative set. Callers MUST treat any
+unknown code from `authorize_trustline` as a rejection of unspecified cause.
+
+In soroban-sdk terms:
+
+```rust
+#[contracterror]
+#[repr(u32)]
+pub enum Error {
+    AccountBanned = 1,
+    AccountNotAllowed = 2,
+    NoTrustline = 3,
+    ContractPaused = 4,
+    CannotAuthorizeAdminContract = 5,
+    // 6+ are implementation-defined
+}
+```
 
 ### 4. One-signature onboard composition (over CAP-73)
 
@@ -512,6 +539,17 @@ Properties:
 - Integrators MUST treat `onboard()` as the canonical single-signature entry
   point and MUST NOT require the holder to sign `authorize_trustline`
   separately.
+
+The router's own errors are fixed `u32` values for the same reason as the
+Authorizer's (§3): a wallet needs to tell a refused holder apart from a failed
+trustline creation without knowing which router implementation it hit.
+
+| Code | Error                  | Condition                                                                             |
+| ---- | ---------------------- | ------------------------------------------------------------------------------------- |
+| `1`  | `NotSac`               | `sac` is not a built-in Stellar Asset Contract (CAP-68 check)                         |
+| `2`  | `TrustFailed`          | CAP-73 `trust()` failed (reserve, missing account, native asset, issuer as holder, …) |
+| `3`  | `AuthorizationRefused` | the discovered authorizer rejected `holder` with a typed error; whole tx reverted     |
+| `4`  | `NotAuthorized`        | the authorizer reported success but `holder` is still not authorized                  |
 
 This is **Option A** of the RFP — _authorize trustlines on behalf of users via a
 standard interface_. See Design Rationale for why (a) is preferred over (b) an
@@ -709,6 +747,16 @@ signed XDR for the integrator to countersign and submit. Emitting an unsigned
 sponsored envelope with no `callback` produces a signature request that cannot
 succeed, and implementations SHOULD reject it rather than hand the user a link
 that fails on submit.
+
+**Error handling.** A refused `authorize_trustline` or `onboard` surfaces as a
+Soroban contract error carrying only a `u32` code (`Error(Contract, #n)`); the
+name is not on the wire. Integrators MUST map that code through the §3 and §4
+tables to choose what the user sees — a banned holder, a holder awaiting
+allowlisting, a paused authorizer and a failed trustline creation each call for
+a different message and a different next step — and SHOULD do so by simulating
+the transaction before asking the holder to sign, so a refusal is shown up front
+rather than after a signature. The reference SDK, CLI and relayer all decode by
+code, not by name.
 
 For an **allowlist** policy, the integrator MUST ensure the holder is allowed
 before submitting: it SHOULD authenticate to `WEB_AUTH_ENDPOINT` (SEP-10) and
@@ -1082,6 +1130,7 @@ CAP-73 is the protocol dependency:
 
 | Version | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0.0.2  | 2026-09-15 | Assigned fixed `u32` values to the §3 Authorizer error codes (`1`–`5`, reserved; implementation-defined errors start at `6`) and to the §4 router errors (`1`–`4`), and added the §7 rule that integrators map the code (not the name) to the message they show, following review feedback that named errors without values are not interoperable: wallets and integrators branch on the encoded number to pick the message they show.                                                                                                                                                                                                                                       |
 | v0.0.1  | 2026-08-31 | Submission version. The SEP process (`ecosystem/README.md`) requires a newly submitted draft to start at `v0.0.1` with the number left `To Be Assigned`. The 0.1–0.6 rows below are this document's pre-submission history in the reference-implementation repo, kept for provenance.                                                                                                                                                                                                                                                                                                                                                                                        |
 | 0.6     | 2026-08-20 | Added the authorization relayer to Reference Implementation — the §7 integrator interface as two HTTP endpoints (`ready` / `authorize`), shipped as a Docker image — plus the lessons it surfaced (three distinguishable not-ready states, `is_eligible` as a pre-submit policy read, service-layer idempotency of authorize-on-behalf) and the MiCA/data-protection design note (`docs/mica-authorization-model.md`): the on-chain record is addresses + enumerated codes only, with no free-text field anywhere in the interface. Testnet e2e now also drives the relayer's ready → authorize → ready flip over plain HTTP.                                                |
 | 0.5     | 2026-08-20 | The asset-agnostic Trustline Authorizer of §3 is implemented and live: `deauthorize_trustline` now carries an enumerated `Reason` into its §8 event, and §3 states the pause scope (everything but `unpause`/`set_admin`/`upgrade`, so a paused contract stays recoverable). Recorded the testnet deployment that replaces the Tranche-1 stub as the EURCV test token's SAC admin, the freeze-replay invariant proven against a deleted-and-recreated trustline, and the issuer admin CLI + runbook under Reference Implementation.                                                                                                                                          |
