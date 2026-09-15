@@ -1,0 +1,166 @@
+Authorization relayer — HTTP transcript
+Relayer : https://authline-relayer.fly.dev
+Holder  : GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX
+Run at  : 2026-09-07T07:54:39.146Z
+Note    : the bearer token is redacted; repeated GET .../ready calls are
+          polls waiting for the ledger view to catch up, not retries.
+          The account is a PATH SEGMENT: /v1/accounts/{account}/{endpoint}.
+
+   1  GET /healthz      200 · ok
+   2  GET …/ready       200 · no_account
+   3  GET …/ready       200 · no_trustline
+   4  GET …/ready       200 · trustline_unauthorized
+   5  POST …/authorize  200 · txHash b8aa776c13c1…
+   6  GET …/ready       200 · ready
+   7  POST …/authorize  200 · alreadyAuthorized, no tx
+   8  POST …/authorize  401 · unauthorized
+
+# 1 · +0.0s · GET /healthz
+> GET /healthz
+> host: authline-relayer.fly.dev
+> authorization: (omitted)
+< 200 OK   152 ms
+< content-type: application/json
+<
+{
+  "ok": true,
+  "network": "TESTNET",
+  "relayer": "GCB6N27Y6GTTMRBUQNYROIB5C37PWAJKLFRL7U3JXFZF7NQIJL2NS2TQ",
+  "defaultAsset": "EURCV",
+  "sep7Callback": "/v1/sep7/callback"
+}
+
+# 2 · +0.8s · GET …/ready
+> GET /v1/accounts/GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX/ready
+> host: authline-relayer.fly.dev
+> authorization: (omitted)
+< 200 OK   351 ms
+< content-type: application/json
+<
+{
+  "account": "GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX",
+  "asset": "EURCV",
+  "network": "TESTNET",
+  "regulated": true,
+  "ready": false,
+  "reason": "no_account",
+  "authorizable": true,
+  "status": {
+    "holderKind": "account",
+    "accountExists": false,
+    "hasTrustline": false,
+    "isAuthorized": false,
+    "sacAuthorized": false
+  }
+}
+
+# 3 · +3.2s · GET …/ready
+> GET /v1/accounts/GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX/ready
+> host: authline-relayer.fly.dev
+> authorization: (omitted)
+< 200 OK   343 ms
+< content-type: application/json
+<
+{
+  "account": "GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX",
+  "asset": "EURCV",
+  "network": "TESTNET",
+  "regulated": true,
+  "ready": false,
+  "reason": "no_trustline",
+  "authorizable": true,
+  "status": {
+    "holderKind": "account",
+    "accountExists": true,
+    "hasTrustline": false,
+    "isAuthorized": false,
+    "sacAuthorized": false
+  }
+}
+
+# 4 · +9.3s · GET …/ready
+> GET /v1/accounts/GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX/ready
+> host: authline-relayer.fly.dev
+> authorization: (omitted)
+< 200 OK   556 ms
+< content-type: application/json
+<
+{
+  "account": "GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX",
+  "asset": "EURCV",
+  "network": "TESTNET",
+  "regulated": true,
+  "ready": false,
+  "reason": "trustline_unauthorized",
+  "authorizable": true,
+  "status": {
+    "holderKind": "account",
+    "accountExists": true,
+    "hasTrustline": true,
+    "isAuthorized": false,
+    "sacAuthorized": false
+  }
+}
+
+# 5 · +14.0s · POST …/authorize
+> POST /v1/accounts/GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX/authorize
+> host: authline-relayer.fly.dev
+> authorization: Bearer «redacted»
+< 200 OK   4680 ms
+< content-type: application/json
+<
+{
+  "account": "GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX",
+  "asset": "EURCV",
+  "authorized": true,
+  "alreadyAuthorized": false,
+  "txHash": "b8aa776c13c1f1c179b5c4a70120cf1f56098ecf200aaf9ae24abe6fba391f7b"
+}
+
+# 6 · +14.4s · GET …/ready
+> GET /v1/accounts/GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX/ready
+> host: authline-relayer.fly.dev
+> authorization: (omitted)
+< 200 OK   361 ms
+< content-type: application/json
+<
+{
+  "account": "GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX",
+  "asset": "EURCV",
+  "network": "TESTNET",
+  "regulated": true,
+  "ready": true,
+  "status": {
+    "holderKind": "account",
+    "accountExists": true,
+    "hasTrustline": true,
+    "isAuthorized": true,
+    "sacAuthorized": true
+  }
+}
+
+# 7 · +14.7s · POST …/authorize
+> POST /v1/accounts/GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX/authorize
+> host: authline-relayer.fly.dev
+> authorization: Bearer «redacted»
+< 200 OK   324 ms
+< content-type: application/json
+<
+{
+  "account": "GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX",
+  "asset": "EURCV",
+  "authorized": true,
+  "alreadyAuthorized": true
+}
+
+# 8 · +14.7s · POST …/authorize
+> POST /v1/accounts/GACYVYJTVMYK3E4SPXKT22XGV5VFF26AGV7PLP76GMCRVXGOBZ3FPRTX/authorize
+> host: authline-relayer.fly.dev
+> authorization: (omitted)
+< 401 Unauthorized   35 ms
+< content-type: application/json
+<
+{
+  "error": "unauthorized",
+  "detail": "pass Authorization: Bearer <token>"
+}

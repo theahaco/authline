@@ -23,6 +23,11 @@
  *   8  POST .../authorize (again)       alreadyAuthorized, no new transaction
  *   9  POST .../authorize (no token)    401
  *
+ * Every one of those exchanges is echoed as it happens and reproduced verbatim
+ * in the report — request line, headers, status and response body — so the
+ * evidence is the trace itself rather than a summary of it. The bearer token is
+ * never printed: it renders as `Bearer «redacted»` wherever it was sent.
+ *
  * Steps 2/3/5 are the three distinguishable not-ready states the SEP's §7
  * lessons describe — the reason an integrator knows what to DO about a
  * not-ready account.
@@ -37,6 +42,7 @@
  *   npm run build -w @theahaco/authline
  *   node scripts/prove-relayer.mjs [--base https://authline-relayer.fly.dev]
  *                                  [--out docs/relayer-evidence.md]
+ *                                  [--transcript relayer-transcript.txt]
  *
  * Assertions are hard failures: the script cannot print a claim it did not
  * actually prove.
@@ -80,6 +86,7 @@ const BASE = (
 	"https://authline-relayer.fly.dev"
 ).replace(/\/$/, "")
 const OUT = flagVal("--out", "docs/relayer-evidence.md")
+const TRANSCRIPT = flagVal("--transcript")
 const TOKEN = process.env.RELAYER_API_TOKEN
 
 if (!TOKEN) {
@@ -119,20 +126,180 @@ function check(cond, msg) {
 	if (!cond) throw new Error(`ASSERTION FAILED: ${msg}`)
 }
 
+// ---------------------------------------------------------------------------
+// The wire log
+// ---------------------------------------------------------------------------
+//
+// Every exchange with the relayer is recorded verbatim — method, path, request
+// headers, status, timing and the response body exactly as it came off the
+// wire — so the run produces a trace a reviewer can READ instead of a summary
+// they have to trust. It is echoed live and reproduced in the report.
+//
+// The bearer token is the one thing that never appears. The Authorization
+// header renders as `Bearer «redacted»`, and any literal occurrence of the
+// token is scrubbed from response bodies too, in case some future error path
+// ever echoes a request header back.
+
+const WIRE = []
+const HOST = new URL(BASE).host
+
+const redact = (s) =>
+	typeof s === "string" && TOKEN ? s.split(TOKEN).join("«redacted»") : s
+
+function bodyLines(text) {
+	const scrubbed = redact(text ?? "")
+	if (!scrubbed.trim()) return ["(empty body)"]
+	try {
+		return JSON.stringify(JSON.parse(scrubbed), null, 2).split("\n")
+	} catch {
+		return scrubbed.split("\n")
+	}
+}
+
+/**
+ * The endpoint, without the account. `/v1/accounts/G…56 chars…/ready` puts the
+ * one word that says WHAT was called at the far right of a long line, behind an
+ * address that swamps it — read quickly, every call looks like a call to
+ * `/accounts`. This pulls the endpoint out so the trace can be scanned.
+ */
+function endpointOf(path) {
+	const clean = (path ?? "").split("?")[0]
+	const seg = clean.split("/").filter(Boolean)
+	return seg.length > 1 ? `…/${seg[seg.length - 1]}` : clean
+}
+
+/** A few words on what the response actually said, for the index. */
+function outcomeOf(e) {
+	if (e.error) return "no response"
+	let b = null
+	try {
+		b = JSON.parse(e.text)
+	} catch {}
+	if (!b || typeof b !== "object") return ""
+	if (b.error) return String(b.error)
+	if (b.txHash) return `txHash ${String(b.txHash).slice(0, 12)}…`
+	if (b.alreadyAuthorized === true) return "alreadyAuthorized, no tx"
+	if (b.reason) return String(b.reason)
+	if (b.ready === true) return "ready"
+	if (b.ok === true) return "ok"
+	return ""
+}
+
+function renderExchange(e, t0, indent = "") {
+	const L = []
+	L.push(
+		`# ${e.n} · +${((e.at - t0) / 1000).toFixed(1)}s · ` +
+			`${e.method} ${endpointOf(e.path)}`,
+	)
+	L.push(`> ${e.method} ${e.path}`)
+	L.push(`> host: ${HOST}`)
+	L.push(`> authorization: ${e.sentToken ? "Bearer «redacted»" : "(omitted)"}`)
+	if (e.error) {
+		L.push(`< (no response — ${redact(e.error)})`)
+	} else {
+		L.push(`< ${e.status} ${e.statusText || ""}`.trimEnd() + `   ${e.ms} ms`)
+		if (e.contentType) L.push(`< content-type: ${e.contentType}`)
+		L.push("<")
+		for (const line of bodyLines(e.text)) L.push(line)
+	}
+	return L.map((l) => indent + l).join("\n")
+}
+
+/**
+ * The flow in one table. The reviewer's question is "did ready → authorize →
+ * ready actually happen", and that should be answerable without reading eight
+ * JSON bodies first.
+ */
+function renderWireIndex(style = "md") {
+	const rows = WIRE.map((e) => {
+		const status = e.error ? "—" : String(e.status)
+		const outcome = outcomeOf(e)
+		return {
+			n: String(e.n),
+			call: `${e.method} ${endpointOf(e.path)}`,
+			res: outcome ? `${status} · ${outcome}` : status,
+		}
+	})
+	if (style === "md") {
+		return [
+			"| # | Call | Response |",
+			"| --- | --- | --- |",
+			...rows.map((r) => `| ${r.n} | \`${r.call}\` | ${r.res} |`),
+		].join("\n")
+	}
+	const w = Math.max(4, ...rows.map((r) => r.call.length))
+	return rows
+		.map((r) => `  ${r.n.padStart(2)}  ${r.call.padEnd(w)}  ${r.res}`)
+		.join("\n")
+}
+
+const renderWire = (indent = "") =>
+	WIRE.length === 0
+		? `${indent}(no exchanges recorded)`
+		: WIRE.map((e) => renderExchange(e, WIRE[0].at, indent)).join("\n\n")
+
+function logExchange(entry) {
+	const e = { n: WIRE.length + 1, at: Date.now(), ...entry }
+	WIRE.push(e)
+	console.log(`\n${renderExchange(e, WIRE[0].at, "      ")}\n`)
+}
+
 /**
  * THE INTEGRATION. Everything an exchange needs is this function plus the two
  * call sites below it — plain `fetch`, no Stellar SDK, no keys.
+ *
+ * The only thing here that is not integration code is the `logExchange` call:
+ * it records the exchange for the transcript and changes nothing about the
+ * request.
  */
 async function relayer(path, { method = "GET", token } = {}) {
-	const res = await fetch(`${BASE}${path}`, {
+	const startedAt = Date.now()
+	let res
+	try {
+		res = await fetch(`${BASE}${path}`, {
+			method,
+			headers: token ? { authorization: `Bearer ${token}` } : {},
+			signal: AbortSignal.timeout(TIMEOUT_MS),
+		})
+	} catch (err) {
+		// A transport failure is part of the trace too — `retry` may well recover
+		// from it, and a transcript that silently dropped the attempt would be
+		// telling the reader a tidier story than what actually happened.
+		logExchange({
+			method,
+			path,
+			sentToken: Boolean(token),
+			error: err instanceof Error ? err.message : String(err),
+			ms: Date.now() - startedAt,
+		})
+		throw err
+	}
+	const text = await res.text()
+	logExchange({
 		method,
-		headers: token ? { authorization: `Bearer ${token}` } : {},
-		signal: AbortSignal.timeout(TIMEOUT_MS),
+		path,
+		sentToken: Boolean(token),
+		status: res.status,
+		statusText: res.statusText,
+		contentType: res.headers.get("content-type"),
+		text,
+		ms: Date.now() - startedAt,
 	})
-	return { status: res.status, body: await res.json().catch(() => null) }
+	let body = null
+	try {
+		body = JSON.parse(text)
+	} catch {}
+	return { status: res.status, body }
 }
 
 const ready = (account) => relayer(`/v1/accounts/${account}/ready`)
+
+/**
+ * `token` defaults to the configured one. To send NO Authorization header, pass
+ * `null` — never `undefined`: a default parameter is applied whenever the
+ * argument is `undefined`, so `authorize(a, undefined)` would silently send the
+ * token and turn the 401 check below into a test that proves nothing.
+ */
 const authorize = (account, token = TOKEN) =>
 	relayer(`/v1/accounts/${account}/authorize`, { method: "POST", token })
 
@@ -382,11 +549,13 @@ async function proveRelayer() {
 
 	// 9 — the endpoint is gated.
 	const noTok = await retry("authorize without token", () =>
-		authorize(holder.publicKey(), undefined),
+		authorize(holder.publicKey(), null),
 	)
 	check(
 		noTok.status === 401,
-		`authorize without a token should be 401, got ${noTok.status}`,
+		`authorize without a token should be 401, got ${noTok.status}. Check the ` +
+			"transcript: if that exchange shows an Authorization header, the token was " +
+			"sent and the endpoint was never actually tested.",
 	)
 	note(
 		"The authorize endpoint is token-gated",
@@ -641,6 +810,42 @@ function writeReport(startedAt) {
 		L.push("")
 	}
 
+	L.push("## Every request and response, verbatim")
+	L.push("")
+	L.push(
+		"The complete HTTP trace of the run above — every call the exchange side made, in " +
+			"order, with the response the hosted relayer returned. `>` is the request, `<` the " +
+			"response. The bearer token does not appear anywhere: it renders as " +
+			"`Bearer «redacted»` wherever it was sent, and the run never prints it.",
+	)
+	L.push("")
+	L.push(
+		"Repeated `GET …/ready` calls are **polling, not retries** — after a transaction the " +
+			"run waits for the ledger's view to catch up, and every poll is shown rather than " +
+			"collapsed, so the trace matches what actually crossed the wire.",
+	)
+	L.push("")
+	L.push(
+		"Every call below names the account as a **path segment** — " +
+			"`/v1/accounts/{account}/ready` — so the endpoint is the last word of the line, " +
+			"not the first. The index names it up front:",
+	)
+	L.push("")
+	L.push(renderWireIndex("md"))
+	L.push("")
+	L.push(
+		"The first call includes a cold start: the hosted instance runs with " +
+			"`min_machines_running = 0` and stops when idle, so it spends a few seconds " +
+			"waking up and then answers in the hundreds of milliseconds. That is the " +
+			"deployment choice for a testnet reference instance, not the service's " +
+			"steady-state latency.",
+	)
+	L.push("")
+	L.push("```http")
+	L.push(renderWire())
+	L.push("```")
+	L.push("")
+
 	L.push("## The rest of D2.3")
 	L.push("")
 	L.push("| Criterion | Evidence |")
@@ -660,6 +865,25 @@ function writeReport(startedAt) {
 	writeFileSync(OUT, `${L.join("\n")}\n`)
 	formatReport(OUT)
 	return OUT
+}
+
+/**
+ * The same trace on its own, for pasting somewhere that is not a markdown file.
+ * Not formatted by prettier: it is a transcript, not a document.
+ */
+function writeTranscript(path, startedAt) {
+	writeFileSync(
+		path,
+		`Authorization relayer — HTTP transcript\n` +
+			`Relayer : ${BASE}\n` +
+			`Holder  : ${holder.publicKey()}\n` +
+			`Run at  : ${startedAt.toISOString()}\n` +
+			`Note    : the bearer token is redacted; repeated GET .../ready calls are\n` +
+			`          polls waiting for the ledger view to catch up, not retries.\n` +
+			`          The account is a PATH SEGMENT: /v1/accounts/{account}/{endpoint}.\n\n` +
+			`${renderWireIndex("text")}\n\n${renderWire()}\n`,
+	)
+	return path
 }
 
 // ---------------------------------------------------------------------------
@@ -699,7 +923,15 @@ try {
 		console.log(`\n    ✖ ${unmet.length} D2.3 criterion/criteria NOT met:`)
 		for (const o of unmet) console.log(`      - ${o.claim}`)
 	}
-	console.log(`\n    Shareable report written to: ${written}\n`)
+	console.log(
+		`\n    ${WIRE.length} relayer exchanges recorded, token redacted.`,
+	)
+	console.log(`    Shareable report written to: ${written}`)
+	if (TRANSCRIPT)
+		console.log(
+			`    Transcript written to: ${writeTranscript(TRANSCRIPT, startedAt)}`,
+		)
+	console.log("")
 	if (unmet.length) process.exitCode = 2
 } catch (err) {
 	console.error(`\n\n✖ PROOF RUN FAILED\n\n  ${err.message}\n`)
@@ -708,6 +940,17 @@ try {
 		for (const e of evidence)
 			console.error(e.hash ? `    ${expertTx(e.hash)}` : `    ${e.claim}`)
 		console.error("")
+	}
+	// The trace is most useful precisely when the run failed, so keep it: the
+	// exchanges were echoed live, but a --transcript run should still get its
+	// file rather than only the ones that finish clean.
+	if (TRANSCRIPT && WIRE.length > 0) {
+		try {
+			console.error(
+				`  ${WIRE.length} exchanges up to the failure written to: ` +
+					`${writeTranscript(TRANSCRIPT, startedAt)}\n`,
+			)
+		} catch {}
 	}
 	process.exitCode = 1
 }
