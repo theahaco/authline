@@ -84,6 +84,14 @@ export {
 	type OnboardingRequest,
 	type Sep7Signer,
 } from "./exchange.js"
+// Tier 0 integration: a plain link from a failed withdrawal to the hosted
+// activation page, and the check the page runs on the way back.
+export {
+	activationLink,
+	safeReturnUrl,
+	RETURN_URL_PARAM,
+	RETURN_URL_MAX,
+} from "./activation-link.js"
 // Wallet side of the SEP-7 handoff: parse, verify, explain, and return via
 // `callback` a `web+stellar:tx` request that `onboardingRequest` emitted.
 export {

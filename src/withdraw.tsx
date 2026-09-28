@@ -15,7 +15,11 @@
  * transaction. Everything it shows comes from `POST /v1/sep7/request`.
  */
 import { StrKey } from "@stellar/stellar-sdk"
-import { getActivationStatus, type ActivationStatus } from "@theahaco/authline"
+import {
+	activationLink,
+	getActivationStatus,
+	type ActivationStatus,
+} from "@theahaco/authline"
 import QRCode from "qrcode"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
@@ -44,6 +48,36 @@ const expertAccount = (a: string) =>
 
 const isReady = (st: ActivationStatus) =>
 	st.holderKind === "contract" ? !!st.sacAuthorized : st.isAuthorized
+
+/**
+ * Tier 0 (docs/integration-tiers.md): no backend at all. A withdrawal to an
+ * address that cannot hold the asset fails, and the failure screen links the
+ * user to the activation page, which links them back here to retry. The screen
+ * runs this way when no relayer is configured — the realistic first
+ * integration — or with `?tier=0` to show it beside a configured relayer.
+ */
+const query = new URLSearchParams(window.location.search)
+const TIER0 = !RELAYER_URL || query.get("tier") === "0"
+
+/**
+ * The Tier 0 link: the activation page served beside this one, preselected on
+ * the asset and address, returning here with the form filled in so the retry
+ * is one click. Only a public https page (or localhost) can be a return
+ * target — anywhere else the link goes without one.
+ */
+function tier0Link(asset: string, address: string, amount: string): string {
+	const base = new URL("./app.html", window.location.href).href
+	const back = new URL(window.location.pathname, window.location.href)
+	if (query.get("tier") === "0") back.searchParams.set("tier", "0")
+	back.searchParams.set("asset", asset)
+	back.searchParams.set("address", address)
+	back.searchParams.set("amount", amount)
+	try {
+		return activationLink({ base, asset, address, returnUrl: back.href })
+	} catch {
+		return activationLink({ base, asset, address })
+	}
+}
 
 /** What `POST /v1/sep7/request` answers. */
 interface Sep7RequestResponse {
@@ -81,6 +115,8 @@ type Phase =
 			originDomain: string | null
 			expiresAt: string | null
 	  }
+	/** Tier 0: the payment would bounce — send the user to activate, then back. */
+	| { t: "failed"; link: string }
 	/** kase A: the backend authorized on the user's behalf — nothing signed. */
 	| { t: "done"; hash: string | null; kase: "A" | "B" | "C" }
 	| { t: "sending-claimable" }
@@ -109,9 +145,12 @@ async function latestTxHash(account: string): Promise<string | null> {
 }
 
 function Withdraw() {
-	const [asset, setAsset] = useState(ASSET)
-	const [address, setAddress] = useState("")
-	const [amount, setAmount] = useState("250.00")
+	// Prefilled when the activation page sends the user back (Tier 0 return).
+	const [asset, setAsset] = useState(
+		() => LIVE_ASSETS.find((a) => a.assetCode === query.get("asset")) ?? ASSET,
+	)
+	const [address, setAddress] = useState(() => query.get("address") ?? "")
+	const [amount, setAmount] = useState(() => query.get("amount") ?? "250.00")
 	const [phase, setPhase] = useState<Phase>({ t: "form" })
 	const [status, setStatus] = useState<ActivationStatus | null>(null)
 	const [copied, setCopied] = useState(false)
@@ -151,6 +190,35 @@ function Withdraw() {
 					"That is not a Stellar address. Paste the G… (or smart-account C…) " +
 					"address your wallet shows for this network.",
 			})
+			return
+		}
+		if (TIER0) {
+			setPhase({ t: "building" })
+			try {
+				// What the exchange learns when it tries to pay: either the payment
+				// goes through, or the network refuses it (op_no_trust /
+				// op_not_authorized). Reading the trustline first is the same answer
+				// without a doomed transaction.
+				const st = await readStatus(account)
+				setStatus(st)
+				if (st.readError && !st.hasTrustline)
+					throw new Error(
+						`Could not read this address from the network — try again (${st.readError})`,
+					)
+				if (isReady(st)) {
+					setPhase({ t: "ready-already" })
+					return
+				}
+				setPhase({
+					t: "failed",
+					link: tier0Link(asset.assetCode, account, amount),
+				})
+			} catch (e) {
+				setPhase({
+					t: "error",
+					message: e instanceof Error ? e.message : String(e),
+				})
+			}
 			return
 		}
 		if (!RELAYER_URL) {
@@ -296,6 +364,16 @@ function Withdraw() {
 		setPhase({ t: "form" })
 	}, [stopPolling])
 
+	// Back from the activation page with the form prefilled: retry the
+	// withdrawal straight away. Only on Tier 0 — with a relayer, an address in
+	// the URL must not fire off a SEP-7 request on its own.
+	const retried = useRef(false)
+	useEffect(() => {
+		if (!TIER0 || retried.current || !query.get("address")) return
+		retried.current = true
+		void start()
+	}, [start])
+
 	const copy = (uri: string) => {
 		navigator.clipboard
 			?.writeText(uri)
@@ -317,10 +395,20 @@ function Withdraw() {
 				<p className="eyebrow">Withdraw</p>
 				<h1>Send {asset.assetCode} to your wallet</h1>
 				<p className="lede">
-					A reference integrator. It holds none of your keys and has no wallet
-					integration: its backend builds a signed SEP-7 request, and your own
-					wallet signs the one transaction that lets you receive{" "}
-					{asset.assetCode}.
+					{TIER0 ? (
+						<>
+							A reference integrator at Tier 0: no backend, no SDK, no wallet
+							integration. When a withdrawal can’t be paid, it links you to
+							Authline to set up your wallet, and you come back here to retry.
+						</>
+					) : (
+						<>
+							A reference integrator. It holds none of your keys and has no
+							wallet integration: its backend builds a signed SEP-7 request, and
+							your own wallet signs the one transaction that lets you receive{" "}
+							{asset.assetCode}.
+						</>
+					)}
 				</p>
 
 				{phase.t === "form" || phase.t === "error" ? (
@@ -374,6 +462,43 @@ function Withdraw() {
 					<p className="working">
 						Checking whether your wallet can already receive {asset.assetCode}…
 					</p>
+				) : null}
+
+				{phase.t === "failed" ? (
+					<div className="result failed">
+						<h2>Withdrawal failed</h2>
+						<p>
+							{status?.hasTrustline ? (
+								<>
+									This address has a {asset.assetCode} trustline, but the issuer
+									has not authorized it yet, so the network refused the payment.
+								</>
+							) : (
+								<>
+									This address can’t receive {asset.assetCode} yet — it has no{" "}
+									{asset.assetCode} trustline, so the network refused the
+									payment.
+								</>
+							)}{" "}
+							Your {amount} {asset.assetCode} stays in your Northwind balance.
+						</p>
+						<p>
+							Set your wallet up on Authline: connect it, approve once, and you
+							come straight back here to retry.
+						</p>
+						<div className="actions">
+							<a className="primary" href={phase.link}>
+								Set up your wallet for {asset.assetCode}
+							</a>
+						</div>
+						<p className="note">
+							The link carries this address and a way back to this page — never
+							a key or a transaction.
+						</p>
+						<button className="quiet" onClick={reset}>
+							Use another address
+						</button>
+					</div>
 				) : null}
 
 				{phase.t === "ready-already" ? (
@@ -588,16 +713,29 @@ function Withdraw() {
 			</section>
 
 			<footer className="foot">
-				Reference integrator for the Trustline Onboarder SEP — Cases A, B, C and
-				claimable-balance delivery. Backend: the Authline relayer (
-				<code>/v1/sep7/request</code>, <code>/v1/sep7/callback</code>,{" "}
-				<code>/v1/claimable/send</code>).
-				{RELAYER_URL ? (
+				{TIER0 ? (
 					<>
-						{" "}
-						Relayer: <code>{RELAYER_URL}</code>
+						Reference integrator for the Trustline Onboarder SEP at Tier 0: a
+						link to the activation page and a way back, nothing else.
+						{RELAYER_URL ? (
+							<>
+								{" "}
+								<a href={window.location.pathname}>
+									Relayer-backed version (Cases A, B, C)
+								</a>
+							</>
+						) : null}
 					</>
-				) : null}
+				) : (
+					<>
+						Reference integrator for the Trustline Onboarder SEP — Cases A, B, C
+						and claimable-balance delivery. Backend: the Authline relayer (
+						<code>/v1/sep7/request</code>, <code>/v1/sep7/callback</code>,{" "}
+						<code>/v1/claimable/send</code>). Relayer:{" "}
+						<code>{RELAYER_URL}</code>.{" "}
+						<a href="?tier=0">Tier 0 version (link only)</a>
+					</>
+				)}
 			</footer>
 		</main>
 	)

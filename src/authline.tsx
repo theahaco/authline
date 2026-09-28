@@ -38,6 +38,8 @@ import {
 	parseSep7TxRequest,
 	planClaim,
 	postSep7Callback,
+	RETURN_URL_PARAM,
+	safeReturnUrl,
 	sep7Signer,
 	verifySep7Signature,
 	type ActivationStatus,
@@ -353,35 +355,47 @@ function Primary({
 	onClick,
 	disabled,
 	full = true,
+	href,
 }: {
 	children: React.ReactNode
 	onClick?: () => void
 	disabled?: boolean
 	full?: boolean
+	/** Render as a same-tab link instead (e.g. back to the referring platform). */
+	href?: string
 }) {
+	const style: React.CSSProperties = {
+		display: "inline-flex",
+		alignItems: "center",
+		justifyContent: "center",
+		gap: 9,
+		width: full ? "100%" : "auto",
+		border: "none",
+		cursor: disabled ? "default" : "pointer",
+		background: disabled ? "#EAE2D4" : AL.emerald,
+		color: disabled ? AL.mut : "#FFFFFF",
+		fontFamily: AL.disp,
+		fontWeight: 600,
+		fontSize: 15,
+		letterSpacing: "-0.01em",
+		padding: "14px 20px",
+		borderRadius: 12,
+		boxShadow: disabled ? "none" : "0 8px 22px -8px rgba(22,115,74,0.55)",
+		textDecoration: "none",
+		boxSizing: "border-box",
+	}
+	if (href && !disabled)
+		return (
+			<a className="al-cta" href={href} style={style}>
+				{children}
+			</a>
+		)
 	return (
 		<button
 			className="al-cta"
 			onClick={onClick}
 			disabled={disabled}
-			style={{
-				display: "inline-flex",
-				alignItems: "center",
-				justifyContent: "center",
-				gap: 9,
-				width: full ? "100%" : "auto",
-				border: "none",
-				cursor: disabled ? "default" : "pointer",
-				background: disabled ? "#EAE2D4" : AL.emerald,
-				color: disabled ? AL.mut : "#FFFFFF",
-				fontFamily: AL.disp,
-				fontWeight: 600,
-				fontSize: 15,
-				letterSpacing: "-0.01em",
-				padding: "14px 20px",
-				borderRadius: 12,
-				boxShadow: disabled ? "none" : "0 8px 22px -8px rgba(22,115,74,0.55)",
-			}}
+			style={style}
 		>
 			{children}
 		</button>
@@ -1094,6 +1108,17 @@ const preselectedAsset = (): AssetConfig | undefined => {
 	return LIVE_ASSETS.find((a) => a.assetCode === q)
 }
 
+/**
+ * Tier 0 return link (docs/integration-tiers.md): the platform page that sent
+ * the user here — typically a withdrawal that failed because this account
+ * could not hold the asset yet. Rendered only as a link the user clicks, next
+ * to its host; never followed automatically.
+ */
+const readReturnUrl = (): URL | null =>
+	safeReturnUrl(
+		new URLSearchParams(window.location.search).get(RETURN_URL_PARAM),
+	)
+
 // ── SEP-7 receiving end ──────────────────────────────────────────────
 /**
  * A `web+stellar:tx` request handed to this page (`app.html?sep7=…`): a third
@@ -1187,6 +1212,8 @@ export function AuthlineApp() {
 	// once; the page then acts as the receiving end of the handoff.
 	const [sep7] = useState(() => readSep7FromUrl())
 	const sep7Ctx = sep7 && "ctx" in sep7 ? sep7.ctx : null
+	// Tier 0: the platform page to send the user back to (`?return_url=`).
+	const [returnUrl] = useState(() => readReturnUrl())
 	// The asset being activated. Defaults to the env-configured asset; a
 	// ?asset=CODE deep link (landing page, partner docs) preselects any live
 	// asset and skips straight past the directory.
@@ -2299,10 +2326,15 @@ export function AuthlineApp() {
 							margin: "0 0 10px",
 						}}
 					>
-						Activation is not yet configured for this network.
+						{canAuthorize(asset)
+							? `Creating a new ${asset.assetCode} trustline is not available on this network yet. If this account already has one, connect to authorize it now.`
+							: "Activation is not yet configured for this network."}
 					</p>
 				)}
-				{ROUTER_MISSING ? (
+				{/* Without a router a new trustline cannot be built, but an existing
+				    unauthorized one still can be authorized (authorize_trustline
+				    needs no router) — so connecting stays open when that is possible. */}
+				{ROUTER_MISSING && !canAuthorize(asset) ? (
 					<Primary disabled>Activation unavailable</Primary>
 				) : (
 					<Primary
@@ -2407,7 +2439,9 @@ export function AuthlineApp() {
 					<StatusRows st={status} asset={asset} />
 				</div>
 				<div style={{ marginTop: 18 }}>
-					<Primary onClick={() => setShowModal(true)}>
+					<Primary
+						onClick={() => (e2eSigner() ? connect("e2e") : setShowModal(true))}
+					>
 						Connect to activate
 					</Primary>
 				</div>
@@ -2841,7 +2875,11 @@ export function AuthlineApp() {
 							View on Explorer
 						</Ghost>
 					)}
-					<Primary onClick={reset}>Done</Primary>
+					{returnUrl ? (
+						<Primary href={returnUrl.href}>Return to {returnUrl.host}</Primary>
+					) : (
+						<Primary onClick={reset}>Done</Primary>
+					)}
 				</div>
 			</div>
 		)
@@ -2893,6 +2931,11 @@ export function AuthlineApp() {
 					You’re all set — this account can already hold and receive{" "}
 					{asset.assetCode}.
 				</p>
+				{returnUrl && (
+					<div style={{ marginBottom: 10 }}>
+						<Primary href={returnUrl.href}>Return to {returnUrl.host}</Primary>
+					</div>
+				)}
 				<Ghost full href={acctUrl(address)}>
 					View on Explorer
 				</Ghost>
@@ -3198,6 +3241,29 @@ export function AuthlineApp() {
 					>
 						{head.s}
 					</p>
+					{/* The host, not a platform name: the link is caller-supplied, so
+					    the only claim the page makes is where it leads. */}
+					{returnUrl && !sep7Ctx && (
+						<p
+							style={{
+								margin: "10px 0 0",
+								fontFamily: AL.disp,
+								fontSize: 13,
+								color: AL.mut,
+								lineHeight: 1.5,
+							}}
+						>
+							When you’re done, return to{" "}
+							<a
+								className="al-link"
+								href={returnUrl.href}
+								style={{ fontFamily: AL.mono, color: AL.ink }}
+							>
+								{returnUrl.host}
+							</a>
+							.
+						</p>
+					)}
 				</div>
 				<Card>
 					{/* Always reachable way back to the asset list (wallet connection
