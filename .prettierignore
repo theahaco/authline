@@ -1,3 +1,7 @@
 # build output
 dist/
 packages/*/dist/
+
+# SEP drafts follow stellar-protocol formatting (prettier 2.8.8, printWidth 79);
+# run `yarn sep-prettify` in the stellar-protocol fork instead.
+sep/
