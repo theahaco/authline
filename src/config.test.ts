@@ -179,7 +179,7 @@ describe("config — testnet USDC (env-driven)", () => {
 		vi.stubEnv("PUBLIC_ASSET_CODE", "EURCV")
 		vi.stubEnv(
 			"PUBLIC_STELLAR_NETWORK_PASSPHRASE",
-			"Public Global Stellar Network ; September 2015",
+			"Test SDF Future Network ; October 2022",
 		)
 		const spy = vi.spyOn(console, "error").mockImplementation(() => {})
 		const { ASSET } = await import("./config")
