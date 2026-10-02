@@ -234,15 +234,17 @@ OFFICIAL_ASSETS.forEach(validateOfficialAsset)
 /**
  * Pinned Authline onboard-router ids per network — the deploy-once, stateless
  * singleton exposing `onboard(sac, holder)`. PINNED like the assets above
- * (never resolved from an advertised source). TESTNET is filled by the
- * deployment task; PUBLIC is added when the mainnet router ships. Future:
- * resolve via the on-chain stellar-registry instead.
+ * (never resolved from an advertised source). Future: resolve via the
+ * on-chain stellar-registry instead.
  */
 export const ROUTERS: Partial<Record<StellarNet, string>> = {
 	// Deployed from contracts/trustline-onboard @ 9925c31 (wasm hash
 	// ef08ae22467dd80bdb8c0017beb6c90964baacb8c6ab1fb673fb2bc765f206e9),
 	// verified on-chain 2026-06-10.
 	TESTNET: "CABVVUYHXS6UVN2VYYXKEUO2XEJIAGMTEYF2BOWGUUJVOO2IGPRWZAX4",
+	// Same wasm hash as TESTNET (byte-identical code, fetched back and
+	// compared), deployed and verified on-chain 2026-10-02.
+	PUBLIC: "CDWMFWGE6KPJDNZZ5ETGAX5YTVQPRAEGLHL2QIN37DP22UU6AIKBNAP6",
 }
 
 // Fail fast at module load if a pinned router id is malformed.
