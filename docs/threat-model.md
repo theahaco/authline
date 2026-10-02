@@ -42,7 +42,7 @@ integrity of the compliance audit trail.
 | --- | ------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------ |
 | P1  | Trustline Authorizer     | `contracts/trustline-authorizer`    | Soroban. Holds SAC adminship. Upgradeable. The single enforcement point.                   |
 | P2  | Onboard router           | `contracts/trustline-onboard`       | Soroban. Stateless, **immutable** (no admin, no upgrade), one pinned instance per network. |
-| P3  | Authorizer stub          | `contracts/authorizer-stub`         | Test fixture only — must never be a production SAC admin (see DoS.4).                      |
+| P3  | Authorizer stub          | _(removed 2026-09)_                 | Former Tranche-1 test fixture; deleted so it can never become a SAC admin (see DoS.4).     |
 | P4  | `@theahaco/authline` SDK | `packages/authline-sdk`             | Pinned registry, SEP-1 discovery, tx builders, sponsorship vetting.                        |
 | P5  | Relayer                  | `packages/relayer`                  | Stateless HTTP service holding a funded, fee-only key.                                     |
 | P6  | dApp                     | `src/authline.tsx`, `src/config.ts` | Static Vite build on GitHub Pages / IPFS.                                                  |

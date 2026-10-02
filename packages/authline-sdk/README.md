@@ -59,6 +59,26 @@ import { ActivateButton } from "@theahaco/authline/react"
 />
 ```
 
+## Tier 0: the activation link
+
+The lightest integration is no integration: link the user from a failed
+withdrawal to the hosted activation page, which links them back.
+`activationLink` builds the link and validates it exactly as the page does
+(`safeReturnUrl`). See
+[docs/integration-tiers.md](../../docs/integration-tiers.md).
+
+```ts
+import { activationLink } from "@theahaco/authline"
+
+activationLink({
+	base: "https://authline.io/app.html",
+	asset: "EURCV",
+	address: destination,
+	returnUrl: "https://exchange.example/withdrawals/42",
+})
+// https://authline.io/app.html?asset=EURCV&address=G…&return_url=https%3A%2F%2F…
+```
+
 ## Backends
 
 - `cap73-one-signature` — funded holder signs once; on-chain `onboard()` wrapper

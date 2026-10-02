@@ -4,7 +4,7 @@ extern crate std;
 use super::*;
 use soroban_sdk::testutils::{Address as _, Events, IssuerFlags, StellarAssetContract};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
-use soroban_sdk::{vec, Address, Env, Event};
+use soroban_sdk::{vec, Address, Env, Event, IntoVal};
 
 // ---------------------------------------------------------------------------
 // Fixture
@@ -787,4 +787,28 @@ mod router {
             OnboardStatus::Authorized
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Constructor re-entry (audit finding 4d3140db): the host refuses any call to
+// `__constructor` after deployment, so instance state cannot be overwritten.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn constructor_cannot_be_invoked_after_deploy() {
+    let f = Fixture::new(Policy::Denylist);
+    let attacker = Address::generate(&f.env);
+
+    let res = f.env.try_invoke_contract::<(), soroban_sdk::Error>(
+        &f.authorizer,
+        &soroban_sdk::Symbol::new(&f.env, "__constructor"),
+        vec![
+            &f.env,
+            attacker.clone().into_val(&f.env),
+            f.sac.address().into_val(&f.env),
+            Policy::Allowlist.into_val(&f.env),
+        ],
+    );
+    assert!(res.is_err(), "post-deploy __constructor call must be rejected");
+    assert_eq!(f.client().admin(), f.admin);
 }

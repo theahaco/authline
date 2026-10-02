@@ -343,3 +343,7 @@ summary {
 .alt p b {
 	color: var(--ink);
 }
+
+.result.failed h2 {
+	color: var(--bad);
+}
